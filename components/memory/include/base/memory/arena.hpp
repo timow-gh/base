@@ -34,11 +34,15 @@ inline constexpr std::byte arenaUninitializedByte{0xCD};
  */
 inline constexpr std::byte arenaFreedByte{0xDD};
 
-// The reservation is address space only; memory is committed as the arena grows.
-// 512 MiB is a generous ceiling for one general-purpose arena; arenas that need
-// more (or much less) state their size, see arena_bytes_for(). 64 KiB commit steps
-// balance the number of commit calls against committed-but-unused memory.
-inline constexpr std::size_t defaultArenaReserveSize = mib(512);
+// The reservation is the arena's hard capacity, since it never moves or chains blocks,
+// but it is address space only: no RAM, no commit charge, no page tables. So the
+// default is larger than any arena can realistically commit, while ~2000 such arenas
+// still fit in the 128 TiB of a 64-bit process. Many small arenas, or environments
+// that limit address space (ulimit -v, Valgrind), should state their size, see
+// arena_bytes_for(). 64 KiB commit steps balance the number of commit calls against
+// committed-but-unused memory.
+static_assert(sizeof(void*) == 8, "the default arena reservation assumes a 64-bit address space");
+inline constexpr std::size_t defaultArenaReserveSize = gib(64);
 inline constexpr std::size_t defaultArenaCommitSize = kib(64);
 
 /**

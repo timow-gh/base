@@ -59,7 +59,7 @@ MSVC cannot link a Debug program against Release libraries.
 using base::memory::Arena;
 using base::memory::arena_bytes_for;
 
-std::optional<Arena> arena = Arena::create(base::mib(64));          // or Arena::create() for 512 MiB
+std::optional<Arena> arena = Arena::create(base::mib(64));          // or Arena::create() for 64 GiB
 Particle* particles = arena->push_array<Particle>(1000).data();
 
 // Size an arena for exactly what it will hold:
@@ -77,7 +77,7 @@ arena->reset();                                        // frees everything, O(1)
 The design decisions:
 
 - **Reserve and commit.** `create()` reserves one contiguous range of address
-  space (`ArenaConfig::reserveSize`, default 512 MiB). Reserving costs no
+  space (`ArenaConfig::reserveSize`, default 64 GiB). Reserving costs no
   memory. Physical memory is committed in `commitSize` steps (default 64 KiB) as
   the arena grows, so an arena only uses the memory it has handed out. The arena
   never moves, so pointers stay valid until the arena is rewound past them.

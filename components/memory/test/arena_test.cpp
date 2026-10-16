@@ -60,9 +60,9 @@ TEST(Arena, CreateRejectsEmptyReservation) {
     EXPECT_FALSE(Arena::create({0, base::kib(64)}).has_value());
 }
 
-TEST(Arena, DefaultConfigReserves512MiB) {
+TEST(Arena, DefaultConfigReserves64GiB) {
     const Arena arena = make_arena(ArenaConfig{});
-    EXPECT_EQ(arena.reserved(), base::mib(512));
+    EXPECT_EQ(arena.reserved(), base::gib(64));
     EXPECT_EQ(arena.committed(), 0U);
 }
 
