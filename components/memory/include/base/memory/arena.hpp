@@ -29,7 +29,7 @@ concept TriviallyDestructible = std::is_trivially_destructible_v<T>;
 inline constexpr std::byte arenaUninitializedByte{0xCD};
 
 /**
- * \brief Debug fill pattern of memory rewound by Arena::reset() or Arena::restore().
+ * \brief Debug fill pattern of memory rewound by Arena::reset() or Arena::rewind().
  * Reading `0xDDDDDDDD...` means using a pointer into memory that was already freed.
  */
 inline constexpr std::byte arenaFreedByte{0xDD};
@@ -79,7 +79,7 @@ struct ArenaConfig {
  * \brief A linear (bump) allocator over one contiguous range of reserved virtual memory.
  *
  * Allocation is a pointer bump plus, when the committed part is exhausted, one commit
- * call. Memory is never freed individually: reset() and restore() rewind the arena,
+ * call. Memory is never freed individually: reset() and rewind() move the arena back,
  * and destroying it releases everything at once. Destructors are never run, which is
  * why push() only accepts trivially destructible types.
  *
@@ -97,7 +97,7 @@ struct ArenaConfig {
 class Arena {
 public:
     /**
-     * \brief A position in an arena, see save() and restore().
+     * \brief A position in an arena, see mark() and rewind().
      */
     struct Marker {
         std::size_t offset = 0;
@@ -173,20 +173,20 @@ public:
     }
 
     /**
-     * \brief Returns the current position, to rewind to it later with restore().
+     * \brief Marks the current position, to return to it later with rewind().
      */
-    [[nodiscard]] Marker save() const noexcept { return Marker{m_offset}; }
+    [[nodiscard]] Marker mark() const noexcept { return Marker{m_offset}; }
 
     /**
-     * \brief Frees everything allocated after `marker` was saved. O(1) in release builds.
+     * \brief Frees everything allocated after `marker` was taken. O(1) in release builds.
      * \param marker A marker of this arena that is not past the current position.
      */
-    void restore(Marker marker) noexcept;
+    void rewind(Marker marker) noexcept;
 
     /**
      * \brief Frees everything. Committed memory stays committed for reuse.
      */
-    void reset() noexcept { restore(Marker{}); }
+    void reset() noexcept { rewind(Marker{}); }
 
     /** \brief Bytes handed out, including alignment padding. */
     [[nodiscard]] std::size_t used() const noexcept { return m_offset; }
@@ -241,14 +241,14 @@ class ArenaScope {
 public:
     explicit ArenaScope(Arena& arena) noexcept
         : m_arena(&arena)
-        , m_marker(arena.save()) {}
+        , m_marker(arena.mark()) {}
 
     ArenaScope(const ArenaScope&) = delete;
     ArenaScope& operator=(const ArenaScope&) = delete;
     ArenaScope(ArenaScope&&) = delete;
     ArenaScope& operator=(ArenaScope&&) = delete;
 
-    ~ArenaScope() { m_arena->restore(m_marker); }
+    ~ArenaScope() { m_arena->rewind(m_marker); }
 
     [[nodiscard]] Arena& arena() const noexcept { return *m_arena; }
 

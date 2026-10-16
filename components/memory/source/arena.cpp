@@ -43,7 +43,7 @@ namespace {
     std::array<char, messageCapacity> buffer{};
     const auto result = std::format_to_n(buffer.data(),
                                          buffer.size(),
-                                         "arena: memory at offset {} was written after reset/restore (use-after-free)",
+                                         "arena: memory at offset {} was written after reset/rewind (use-after-free)",
                                          offset);
     const auto length = static_cast<std::size_t>(result.out - buffer.data());
     ::base::detail::assert_failed("freed arena memory is unmodified", std::string_view(buffer.data(), length));
@@ -177,8 +177,8 @@ bool Arena::commit_up_to(std::size_t end) noexcept {
     return true;
 }
 
-void Arena::restore(Marker marker) noexcept {
-    BASE_ASSERT_MSG(marker.offset <= m_offset, "restore to a marker past the current position");
+void Arena::rewind(Marker marker) noexcept {
+    BASE_ASSERT_MSG(marker.offset <= m_offset, "rewind to a marker past the current position");
     if (marker.offset >= m_offset) {
         return;
     }

@@ -82,7 +82,7 @@ TEST_F(ArenaDebugTest, AllocateFillsUninitializedPattern) {
     EXPECT_TRUE(all_bytes_equal(memory, 256, arenaUninitializedByte));
 }
 
-TEST_F(ArenaDebugTest, RestoreFillsFreedPattern) {
+TEST_F(ArenaDebugTest, RewindFillsFreedPattern) {
     if (!Arena::debug_checks_enabled()) {
         GTEST_SKIP() << "base was built without BASE_ARENA_DEBUG";
     }
@@ -133,9 +133,9 @@ TEST_F(ArenaDebugTest, ReusingMemoryWrittenAfterResetIsReported) {
 
 TEST_F(ArenaDebugTest, UntouchedFreedMemoryIsNotReported) {
     ASSERT_NE(arena().allocate(128, 8), nullptr);
-    const Arena::Marker marker = arena().save();
+    const Arena::Marker marker = arena().mark();
     ASSERT_NE(arena().allocate(4096, 64), nullptr);
-    arena().restore(marker);
+    arena().rewind(marker);
     ASSERT_NE(arena().allocate(8192, 16), nullptr);
     arena().reset();
     ASSERT_NE(arena().allocate(10000, 8), nullptr);
@@ -161,13 +161,13 @@ TEST(ArenaAsanDeathTest, ReadingPastTheLastAllocationIsReportedByAsan) {
 }
 #endif
 
-TEST_F(ArenaDebugTest, RestoreToAMarkerPastThePositionAsserts) {
+TEST_F(ArenaDebugTest, RewindToAMarkerPastThePositionAsserts) {
 #if BASE_ENABLE_ASSERTS
     ASSERT_NE(arena().allocate(64, 8), nullptr);
-    const Arena::Marker later = arena().save();
+    const Arena::Marker later = arena().mark();
     arena().reset();
 
-    arena().restore(later);
+    arena().rewind(later);
     EXPECT_EQ(recorded().messages.size(), 1U);
     EXPECT_EQ(arena().used(), 0U);
 #else

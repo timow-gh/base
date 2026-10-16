@@ -86,11 +86,11 @@ The design decisions:
   safe total. Reservations are rounded up to the allocation granularity (64 KiB
   on Windows).
 - **Linear, no destructors.** Allocation bumps an offset. Memory is never freed
-  one allocation at a time. `reset()` frees everything, and `save()` / `restore()`
+  one allocation at a time. `reset()` frees everything, and `mark()` / `rewind()`
   or an `ArenaScope` free everything allocated after a point. Destructors never
   run, so `push<T>()` / `push_array<T>()` only accept trivially destructible types.
   `std::string` and similar types are a compile error.
-- **No zeroing on rewind.** `reset()` and `restore()` only move the offset; the
+- **No zeroing on rewind.** `reset()` and `rewind()` only move the offset; the
   next user overwrites the memory anyway. `allocate_zeroed()` and `push_array()`
   clear only reused bytes. Memory that was never handed out is still zero from
   the OS.
@@ -100,13 +100,13 @@ The design decisions:
   | Bytes | Meaning |
   |---|---|
   | `CD CD CD CD ...` | allocated with `allocate()` but not yet initialized |
-  | `DD DD DD DD ...` | freed by `reset()` / `restore()`: a pointer that shows this is dangling |
+  | `DD DD DD DD ...` | freed by `reset()` / `rewind()`: a pointer that shows this is dangling |
   | `00 00 00 00 ...` | committed but never used |
 
 - **Use-after-free assertion.** Before the arena hands out memory again, debug
   builds check that the freed memory still holds `0xDD`. If something wrote
   there after it was freed, `BASE_ASSERT` fires: *"arena: memory at offset N was
-  written after reset/restore (use-after-free)"*.
+  written after reset/rewind (use-after-free)"*.
 - **AddressSanitizer.** Under ASan every byte that is not handed out is poisoned.
   Any read or write of freed memory, or past the last allocation, is reported as
   `use-after-poison`.

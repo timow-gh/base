@@ -183,22 +183,22 @@ TEST(Arena, ResetRewindsToTheStartAndKeepsCommittedMemory) {
     EXPECT_EQ(arena.committed(), committed);
 }
 
-TEST(Arena, RestoreRewindsToTheSavedMarker) {
+TEST(Arena, RewindReturnsToTheMarker) {
     Arena arena = make_arena();
     ASSERT_NE(arena.allocate(100, 8), nullptr);
-    const Arena::Marker marker = arena.save();
+    const Arena::Marker marker = arena.mark();
     EXPECT_EQ(marker.offset, 100U);
 
     void* scratch = arena.allocate(500, 8);
     ASSERT_NE(scratch, nullptr);
     EXPECT_GT(arena.used(), 100U);
 
-    arena.restore(marker);
+    arena.rewind(marker);
     EXPECT_EQ(arena.used(), 100U);
     EXPECT_EQ(arena.allocate(500, 8), scratch);
 }
 
-TEST(Arena, NestedScopesRestoreTheirOwnPositions) {
+TEST(Arena, NestedScopesRewindToTheirOwnPositions) {
     Arena arena = make_arena();
     ASSERT_NE(arena.allocate(64, 8), nullptr);
     {
