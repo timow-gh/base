@@ -29,7 +29,7 @@ concept TriviallyDestructible = std::is_trivially_destructible_v<T>;
 inline constexpr std::byte arenaUninitializedByte{0xCD};
 
 /**
- * \brief Debug fill pattern of memory rewound by Arena::reset() or Arena::rewind().
+ * \brief Debug fill pattern of memory rewound by Arena::reset() or Arena::rewind_to().
  * Reading `0xDDDDDDDD...` means using a pointer into memory that was already freed.
  */
 inline constexpr std::byte arenaFreedByte{0xDD};
@@ -83,9 +83,9 @@ struct ArenaConfig {
  * \brief A linear (bump) allocator over one contiguous range of reserved virtual memory.
  *
  * Allocation is a pointer bump plus, when the committed part is exhausted, one commit
- * call. Memory is never freed individually: reset() and rewind() move the arena back,
- * and destroying it releases everything at once. Destructors are never run, which is
- * why push() only accepts trivially destructible types.
+ * call. Memory is never freed individually: reset() and rewind_to() move the arena
+ * back, and destroying it releases everything at once. Destructors are never run,
+ * which is why push() only accepts trivially destructible types.
  *
  * Pointers stay valid until the arena is rewound past them, because the arena grows
  * in place and never moves.
@@ -101,7 +101,7 @@ struct ArenaConfig {
 class Arena {
 public:
     /**
-     * \brief A position in an arena, see mark() and rewind().
+     * \brief A position in an arena, see mark_position() and rewind_to().
      */
     struct Marker {
         std::size_t offset = 0;
@@ -144,6 +144,35 @@ public:
     [[nodiscard]] void* allocate_zeroed(std::size_t size, std::size_t alignment) noexcept;
 
     /**
+     * \brief Grows the block at `memory` from `oldSize` to `newSize` bytes without moving it.
+     *
+     * Only possible for the most recent allocation, and only while no mark_position() was
+     * taken after it: rewinding to such a marker would free the grown part. The added
+     * bytes are uninitialized. O(1), plus a commit call when the committed part is
+     * exhausted.
+     *
+     * \param newSize At least `oldSize`.
+     * \return false, leaving the arena unchanged, if the block cannot grow in place.
+     */
+    [[nodiscard]] bool try_grow(void* memory, std::size_t oldSize, std::size_t newSize) noexcept;
+
+    /**
+     * \brief Grows the block at `memory` in place if possible (see try_grow()), otherwise
+     * allocates `newSize` bytes and copies the first `oldSize` bytes over.
+     *
+     * The copy is a plain byte copy, so the block must hold trivially copyable data.
+     * A copied-from block is not reused: it stays allocated until the arena is
+     * rewound past it. Growing geometrically (e.g. doubling) keeps that waste below the
+     * final size.
+     *
+     * \param memory nullptr (with `oldSize` 0) allocates a new block.
+     * \param newSize At least `oldSize`.
+     * \param alignment The alignment `memory` was allocated with.
+     * \return nullptr, leaving the old block intact, when the arena is exhausted.
+     */
+    [[nodiscard]] void* reallocate(void* memory, std::size_t oldSize, std::size_t newSize, std::size_t alignment) noexcept;
+
+    /**
      * \brief Constructs a T from `args`. It is never destroyed.
      * \return nullptr when the arena is exhausted.
      */
@@ -177,20 +206,25 @@ public:
     }
 
     /**
-     * \brief Marks the current position, to return to it later with rewind().
+     * \brief Marks the current position, to return to it later with rewind_to().
+     *
+     * Non-const because it ends try_grow() for the allocations made before it.
      */
-    [[nodiscard]] Marker mark() const noexcept { return Marker{m_offset}; }
+    [[nodiscard]] Marker mark_position() noexcept {
+        m_lastAllocation = noLastAllocation;
+        return Marker{m_offset};
+    }
 
     /**
      * \brief Frees everything allocated after `marker` was taken. O(1) in release builds.
      * \param marker A marker of this arena that is not past the current position.
      */
-    void rewind(Marker marker) noexcept;
+    void rewind_to(Marker marker) noexcept;
 
     /**
      * \brief Frees everything. Committed memory stays committed for reuse.
      */
-    void reset() noexcept { rewind(Marker{}); }
+    void reset() noexcept { rewind_to(Marker{}); }
 
     /** \brief Bytes handed out, including alignment padding. */
     [[nodiscard]] std::size_t used() const noexcept { return m_offset; }
@@ -213,9 +247,13 @@ private:
         Zeroed,
     };
 
+    static constexpr std::size_t noLastAllocation = std::numeric_limits<std::size_t>::max();
+
     Arena(std::byte* base, std::size_t reserved, std::size_t commitStep) noexcept;
 
     [[nodiscard]] void* allocate_impl(std::size_t size, std::size_t alignment, Fill fill) noexcept;
+    // Moves the position to `end` and hands out [begin, end); [m_offset, begin) is padding.
+    [[nodiscard]] bool hand_out(std::size_t begin, std::size_t end, Fill fill) noexcept;
     [[nodiscard]] bool commit_up_to(std::size_t end) noexcept;
     void release_reservation() noexcept;
 
@@ -227,6 +265,8 @@ private:
     // The largest offset ever handed out. Bytes below it may hold old data; bytes
     // above it are still zero from the OS.
     std::size_t m_highWater = 0;
+    // Offset of the allocation that try_grow() may extend, or noLastAllocation.
+    std::size_t m_lastAllocation = noLastAllocation;
 };
 
 /**
@@ -245,14 +285,14 @@ class ArenaScope {
 public:
     explicit ArenaScope(Arena& arena) noexcept
         : m_arena(&arena)
-        , m_marker(arena.mark()) {}
+        , m_marker(arena.mark_position()) {}
 
     ArenaScope(const ArenaScope&) = delete;
     ArenaScope& operator=(const ArenaScope&) = delete;
     ArenaScope(ArenaScope&&) = delete;
     ArenaScope& operator=(ArenaScope&&) = delete;
 
-    ~ArenaScope() { m_arena->rewind(m_marker); }
+    ~ArenaScope() { m_arena->rewind_to(m_marker); }
 
     [[nodiscard]] Arena& arena() const noexcept { return *m_arena; }
 

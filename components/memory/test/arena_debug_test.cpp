@@ -133,13 +133,44 @@ TEST_F(ArenaDebugTest, ReusingMemoryWrittenAfterResetIsReported) {
 
 TEST_F(ArenaDebugTest, UntouchedFreedMemoryIsNotReported) {
     ASSERT_NE(arena().allocate(128, 8), nullptr);
-    const Arena::Marker marker = arena().mark();
+    const Arena::Marker marker = arena().mark_position();
     ASSERT_NE(arena().allocate(4096, 64), nullptr);
-    arena().rewind(marker);
+    arena().rewind_to(marker);
     ASSERT_NE(arena().allocate(8192, 16), nullptr);
     arena().reset();
     ASSERT_NE(arena().allocate(10000, 8), nullptr);
     EXPECT_TRUE(recorded().messages.empty());
+}
+
+TEST_F(ArenaDebugTest, TryGrowFillsTheGrownPartWithTheUninitializedPattern) {
+    if (!Arena::debug_checks_enabled()) {
+        GTEST_SKIP() << "base was built without BASE_ARENA_DEBUG";
+    }
+    auto* memory = static_cast<std::byte*>(arena().allocate(64, 8));
+    ASSERT_NE(memory, nullptr);
+    std::memset(memory, 0x42, 64);
+
+    ASSERT_TRUE(arena().try_grow(memory, 64, 256));
+    EXPECT_TRUE(all_bytes_equal(memory, 64, std::byte{0x42}));
+    EXPECT_TRUE(all_bytes_equal(memory + 64, 192, arenaUninitializedByte));
+}
+
+TEST_F(ArenaDebugTest, TryGrowOverMemoryWrittenAfterResetIsReported) {
+    if (!Arena::debug_checks_enabled()) {
+        GTEST_SKIP() << "base was built without BASE_ARENA_DEBUG";
+    }
+    auto* memory = static_cast<std::byte*>(arena().allocate(128, 8));
+    ASSERT_NE(memory, nullptr);
+    arena().reset();
+    ASSERT_EQ(arena().allocate(64, 8), memory);
+
+    // A dangling pointer writes into the freed part the block will grow into.
+    BASE_ASAN_UNPOISON(memory + 64, 64);
+    memory[100] = std::byte{0x01};
+
+    ASSERT_TRUE(arena().try_grow(memory, 64, 128));
+    ASSERT_EQ(recorded().messages.size(), 1U);
+    EXPECT_NE(recorded().messages.front().find("offset 100"), std::string::npos) << recorded().messages.front();
 }
 
 #if BASE_HAS_ASAN
@@ -164,10 +195,10 @@ TEST(ArenaAsanDeathTest, ReadingPastTheLastAllocationIsReportedByAsan) {
 TEST_F(ArenaDebugTest, RewindToAMarkerPastThePositionAsserts) {
 #if BASE_ENABLE_ASSERTS
     ASSERT_NE(arena().allocate(64, 8), nullptr);
-    const Arena::Marker later = arena().mark();
+    const Arena::Marker later = arena().mark_position();
     arena().reset();
 
-    arena().rewind(later);
+    arena().rewind_to(later);
     EXPECT_EQ(recorded().messages.size(), 1U);
     EXPECT_EQ(arena().used(), 0U);
 #else

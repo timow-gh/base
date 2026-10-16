@@ -89,11 +89,12 @@ The design decisions:
   safe total. Reservations are rounded up to the allocation granularity (64 KiB
   on Windows).
 - **Linear, no destructors.** Allocation bumps an offset. Memory is never freed
-  one allocation at a time. `reset()` frees everything, and `mark()` / `rewind()`
-  or an `ArenaScope` free everything allocated after a point. Destructors never
-  run, so `push<T>()` / `push_array<T>()` only accept trivially destructible types.
+  one allocation at a time. `reset()` frees everything, and `mark_position()` /
+  `rewind_to()` or an `ArenaScope` free everything allocated after a point.
+  Destructors never run, so `push<T>()` / `push_array<T>()` only accept trivially
+  destructible types.
   `std::string` and similar types are a compile error.
-- **No zeroing on rewind.** `reset()` and `rewind()` only move the offset; the
+- **No zeroing on rewind.** `reset()` and `rewind_to()` only move the offset; the
   next user overwrites the memory anyway. `allocate_zeroed()` and `push_array()`
   clear only reused bytes. Memory that was never handed out is still zero from
   the OS.
@@ -103,7 +104,7 @@ The design decisions:
   | Bytes | Meaning |
   |---|---|
   | `CD CD CD CD ...` | allocated with `allocate()` but not yet initialized |
-  | `DD DD DD DD ...` | freed by `reset()` / `rewind()`: a pointer that shows this is dangling |
+  | `DD DD DD DD ...` | freed by `reset()` / `rewind_to()`: a pointer that shows this is dangling |
   | `00 00 00 00 ...` | committed but never used |
 
 - **Use-after-free assertion.** Before the arena hands out memory again, debug

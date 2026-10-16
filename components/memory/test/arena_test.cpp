@@ -186,14 +186,14 @@ TEST(Arena, ResetRewindsToTheStartAndKeepsCommittedMemory) {
 TEST(Arena, RewindReturnsToTheMarker) {
     Arena arena = make_arena();
     ASSERT_NE(arena.allocate(100, 8), nullptr);
-    const Arena::Marker marker = arena.mark();
+    const Arena::Marker marker = arena.mark_position();
     EXPECT_EQ(marker.offset, 100U);
 
     void* scratch = arena.allocate(500, 8);
     ASSERT_NE(scratch, nullptr);
     EXPECT_GT(arena.used(), 100U);
 
-    arena.rewind(marker);
+    arena.rewind_to(marker);
     EXPECT_EQ(arena.used(), 100U);
     EXPECT_EQ(arena.allocate(500, 8), scratch);
 }
@@ -283,4 +283,119 @@ TEST(Arena, ZeroSizedAllocationReturnsAlignedPointer) {
     void* memory = arena.allocate(0, 64);
     ASSERT_NE(memory, nullptr);
     EXPECT_TRUE(base::is_aligned(address_of(memory), std::size_t{64}));
+}
+
+TEST(Arena, TryGrowExtendsTheLastAllocationInPlace) {
+    Arena arena = make_arena();
+    auto* block = static_cast<std::byte*>(arena.allocate(100, 8));
+    ASSERT_NE(block, nullptr);
+
+    EXPECT_TRUE(arena.try_grow(block, 100, 300));
+    EXPECT_EQ(arena.used(), 300U);
+    std::memset(block, 0x33, 300);
+    EXPECT_EQ(arena.allocate(1, 1), block + 300);
+}
+
+TEST(Arena, TryGrowFailsWhenTheBlockIsNotTheLastAllocation) {
+    Arena arena = make_arena();
+    void* first = arena.allocate(100, 8);
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(arena.allocate(10, 8), nullptr);
+    const std::size_t used = arena.used();
+
+    EXPECT_FALSE(arena.try_grow(first, 100, 300));
+    EXPECT_EQ(arena.used(), used);
+}
+
+TEST(Arena, TryGrowFailsForAWrongOldSize) {
+    Arena arena = make_arena();
+    void* block = arena.allocate(100, 8);
+    ASSERT_NE(block, nullptr);
+    EXPECT_FALSE(arena.try_grow(block, 50, 300));
+    EXPECT_EQ(arena.used(), 100U);
+}
+
+TEST(Arena, TryGrowFailsAfterAMarkAndAfterARewind) {
+    Arena arena = make_arena();
+    void* before = arena.allocate(100, 8);
+    ASSERT_NE(before, nullptr);
+    const Arena::Marker marker = arena.mark_position();
+    EXPECT_FALSE(arena.try_grow(before, 100, 200));
+
+    // An allocation made after the marker may grow: rewinding frees all of it.
+    void* after = arena.allocate(100, 8);
+    ASSERT_NE(after, nullptr);
+    EXPECT_TRUE(arena.try_grow(after, 100, 200));
+
+    arena.rewind_to(marker);
+    void* again = arena.allocate(100, 8);
+    ASSERT_NE(again, nullptr);
+    arena.reset();
+    EXPECT_FALSE(arena.try_grow(again, 100, 200));
+}
+
+TEST(Arena, TryGrowCommitsAcrossCommitSteps) {
+    Arena arena = make_arena({base::mib(16), base::kib(64)});
+    auto* block = static_cast<std::byte*>(arena.allocate(base::kib(1), 8));
+    ASSERT_NE(block, nullptr);
+
+    ASSERT_TRUE(arena.try_grow(block, base::kib(1), base::mib(1)));
+    EXPECT_GE(arena.committed(), base::mib(1));
+    std::memset(block, 0x44, base::mib(1));
+    EXPECT_EQ(block[base::mib(1) - 1U], std::byte{0x44});
+}
+
+TEST(Arena, TryGrowFailsBeyondTheReservation) {
+    const std::size_t granularity = base::platform::allocation_granularity();
+    Arena arena = make_arena({granularity, granularity});
+    void* block = arena.allocate(1, 1);
+    ASSERT_NE(block, nullptr);
+
+    EXPECT_FALSE(arena.try_grow(block, 1, granularity + 1U));
+    EXPECT_EQ(arena.used(), 1U);
+    EXPECT_TRUE(arena.try_grow(block, 1, granularity));
+}
+
+TEST(Arena, ReallocateGrowsInPlaceWhenPossible) {
+    Arena arena = make_arena();
+    void* block = arena.allocate(64, 16);
+    ASSERT_NE(block, nullptr);
+    EXPECT_EQ(arena.reallocate(block, 64, 256, 16), block);
+    EXPECT_EQ(arena.used(), 256U);
+}
+
+TEST(Arena, ReallocateCopiesWhenTheBlockCannotGrow) {
+    Arena arena = make_arena();
+    auto* block = static_cast<std::byte*>(arena.allocate(16, 16));
+    ASSERT_NE(block, nullptr);
+    std::memset(block, 0x55, 16);
+    ASSERT_NE(arena.allocate(1, 1), nullptr);
+
+    auto* moved = static_cast<std::byte*>(arena.reallocate(block, 16, 64, 16));
+    ASSERT_NE(moved, nullptr);
+    EXPECT_NE(moved, block);
+    EXPECT_TRUE(base::is_aligned(address_of(moved), std::size_t{16}));
+    EXPECT_TRUE(std::all_of(moved, moved + 16, [](std::byte value) { return value == std::byte{0x55}; }));
+
+    // The copy is the last allocation now, so the next growth is in place again.
+    EXPECT_EQ(arena.reallocate(moved, 64, 128, 16), moved);
+}
+
+TEST(Arena, ReallocateFromNullptrAllocates) {
+    Arena arena = make_arena();
+    void* block = arena.reallocate(nullptr, 0, 32, 8);
+    ASSERT_NE(block, nullptr);
+    EXPECT_EQ(arena.used(), 32U);
+}
+
+TEST(Arena, ReallocateReturnsNullptrWhenExhaustedAndKeepsTheOldBlock) {
+    const std::size_t granularity = base::platform::allocation_granularity();
+    Arena arena = make_arena({granularity, granularity});
+    auto* block = static_cast<std::byte*>(arena.allocate(16, 8));
+    ASSERT_NE(block, nullptr);
+    std::memset(block, 0x66, 16);
+    ASSERT_NE(arena.allocate(1, 1), nullptr);
+
+    EXPECT_EQ(arena.reallocate(block, 16, granularity, 8), nullptr);
+    EXPECT_EQ(block[15], std::byte{0x66});
 }

@@ -82,7 +82,8 @@ Arena::Arena(Arena&& other) noexcept
     , m_committed(std::exchange(other.m_committed, 0U))
     , m_commitStep(std::exchange(other.m_commitStep, 0U))
     , m_offset(std::exchange(other.m_offset, 0U))
-    , m_highWater(std::exchange(other.m_highWater, 0U)) {}
+    , m_highWater(std::exchange(other.m_highWater, 0U))
+    , m_lastAllocation(std::exchange(other.m_lastAllocation, noLastAllocation)) {}
 
 Arena& Arena::operator=(Arena&& other) noexcept {
     if (this != &other) {
@@ -93,6 +94,7 @@ Arena& Arena::operator=(Arena&& other) noexcept {
         m_commitStep = std::exchange(other.m_commitStep, 0U);
         m_offset = std::exchange(other.m_offset, 0U);
         m_highWater = std::exchange(other.m_highWater, 0U);
+        m_lastAllocation = std::exchange(other.m_lastAllocation, noLastAllocation);
     }
     return *this;
 }
@@ -128,12 +130,41 @@ void* Arena::allocate_impl(std::size_t size, std::size_t alignment, Fill fill) n
     // of every supported alignment, so aligning the offset aligns the address, and
     // `begin` cannot pass m_reserved.
     const std::size_t begin = align_up(m_offset, alignment);
-    if (size > m_reserved - begin) {
+    if (size > m_reserved - begin || !hand_out(begin, begin + size, fill)) {
         return nullptr;
     }
-    const std::size_t end = begin + size;
+    m_lastAllocation = begin;
+    return m_base + begin;
+}
+
+bool Arena::try_grow(void* memory, std::size_t oldSize, std::size_t newSize) noexcept {
+    BASE_ASSERT(newSize >= oldSize);
+    if (m_lastAllocation == noLastAllocation || memory != m_base + m_lastAllocation ||
+        oldSize != m_offset - m_lastAllocation) {
+        return false;
+    }
+    if (newSize > m_reserved - m_lastAllocation) {
+        return false;
+    }
+    return hand_out(m_offset, m_lastAllocation + newSize, Fill::Uninitialized);
+}
+
+void* Arena::reallocate(void* memory, std::size_t oldSize, std::size_t newSize, std::size_t alignment) noexcept {
+    BASE_ASSERT(newSize >= oldSize);
+    BASE_ASSERT(memory != nullptr || oldSize == 0U);
+    if (memory != nullptr && try_grow(memory, oldSize, newSize)) {
+        return memory;
+    }
+    void* moved = allocate(newSize, alignment);
+    if (moved != nullptr && oldSize > 0U) {
+        std::memcpy(moved, memory, oldSize);
+    }
+    return moved;
+}
+
+bool Arena::hand_out(std::size_t begin, std::size_t end, Fill fill) noexcept {
     if (end > m_committed && !commit_up_to(end)) {
-        return nullptr;
+        return false;
     }
 
     // [m_offset, m_highWater) is the freed region: in debug builds it holds
@@ -151,7 +182,7 @@ void* Arena::allocate_impl(std::size_t size, std::size_t alignment, Fill fill) n
     }
     std::memset(m_base + begin,
                 std::to_integer<int>(fill == Fill::Zeroed ? std::byte{0} : arenaUninitializedByte),
-                size);
+                end - begin);
 #else
     // Bytes past the high water mark were never handed out and are still zero.
     if (fill == Fill::Zeroed && begin < reusedEnd) {
@@ -163,7 +194,7 @@ void* Arena::allocate_impl(std::size_t size, std::size_t alignment, Fill fill) n
 
     m_offset = end;
     m_highWater = std::max(m_highWater, end);
-    return m_base + begin;
+    return true;
 }
 
 bool Arena::commit_up_to(std::size_t end) noexcept {
@@ -177,7 +208,7 @@ bool Arena::commit_up_to(std::size_t end) noexcept {
     return true;
 }
 
-void Arena::rewind(Marker marker) noexcept {
+void Arena::rewind_to(Marker marker) noexcept {
     BASE_ASSERT_MSG(marker.offset <= m_offset, "rewind to a marker past the current position");
     if (marker.offset >= m_offset) {
         return;
@@ -190,6 +221,7 @@ void Arena::rewind(Marker marker) noexcept {
 #endif
     BASE_ASAN_POISON(m_base + marker.offset, m_offset - marker.offset);
     m_offset = marker.offset;
+    m_lastAllocation = noLastAllocation;
 }
 
 bool Arena::debug_checks_enabled() noexcept {
