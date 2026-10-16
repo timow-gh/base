@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base/core/assert.hpp"
 #include "base/core/units.hpp"
 
 #include <concepts>
@@ -33,10 +34,35 @@ inline constexpr std::byte arenaUninitializedByte{0xCD};
  */
 inline constexpr std::byte arenaFreedByte{0xDD};
 
-// 64 GiB of address space costs nothing until it is committed, and is more than
-// any single arena should need; 64 KiB commit steps balance syscalls against waste.
-inline constexpr std::size_t defaultArenaReserveSize = gib(64);
+// The reservation is address space only; memory is committed as the arena grows.
+// 512 MiB is a generous ceiling for one general-purpose arena; arenas that need
+// more (or much less) state their size, see arena_bytes_for(). 64 KiB commit steps
+// balance the number of commit calls against committed-but-unused memory.
+inline constexpr std::size_t defaultArenaReserveSize = mib(512);
 inline constexpr std::size_t defaultArenaCommitSize = kib(64);
+
+/**
+ * \brief Bytes an arena must hold for `count` objects of T, pushed with one
+ * push_array<T>(count) or with `count` consecutive push<T>() calls: the objects plus
+ * the worst-case alignment padding before the first one.
+ *
+ * Consecutive Ts need no padding between them because sizeof(T) is a multiple of
+ * alignof(T), so the results of several calls add up to a safe total:
+ * \code
+ * constexpr std::size_t meshArenaSize = arena_bytes_for<Vertex>(10'000) + arena_bytes_for<Index>(30'000);
+ * std::optional<Arena> arena = Arena::create(meshArenaSize);
+ * \endcode
+ */
+template <typename T>
+[[nodiscard]] constexpr std::size_t arena_bytes_for(std::size_t count = 1) noexcept {
+    constexpr std::size_t maxPadding = alignof(T) - 1U;
+    if (count == 0U) {
+        return 0U;
+    }
+    BASE_ASSERT_MSG(count <= (std::numeric_limits<std::size_t>::max() - maxPadding) / sizeof(T),
+                    "arena size overflows std::size_t");
+    return (count * sizeof(T)) + maxPadding;
+}
 
 /**
  * \brief Sizes of an arena. Both are rounded up to what the OS requires.
@@ -79,9 +105,20 @@ public:
 
     /**
      * \brief Reserves the address space for a new arena. Nothing is committed yet.
+     *
+     * The reservation is rounded up to the allocation granularity (64 KiB on
+     * Windows, the page size elsewhere), so even a tiny arena reserves that much
+     * address space, and commits at least one page once it is used.
+     *
      * \return std::nullopt if the address space cannot be reserved.
      */
     [[nodiscard]] static std::optional<Arena> create(const ArenaConfig& config = {}) noexcept;
+
+    /**
+     * \brief Like create(const ArenaConfig&) with the default commit size, e.g.
+     * `Arena::create(mib(64))` or `Arena::create(arena_bytes_for<Particle>(1000))`.
+     */
+    [[nodiscard]] static std::optional<Arena> create(std::size_t reserveSize) noexcept;
 
     Arena(const Arena&) = delete;
     Arena& operator=(const Arena&) = delete;

@@ -11,6 +11,7 @@
 #include <cstring>
 #include <limits>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -59,10 +60,59 @@ TEST(Arena, CreateRejectsEmptyReservation) {
     EXPECT_FALSE(Arena::create({0, base::kib(64)}).has_value());
 }
 
-TEST(Arena, DefaultConfigReservesLargeAddressSpace) {
+TEST(Arena, DefaultConfigReserves512MiB) {
     const Arena arena = make_arena(ArenaConfig{});
-    EXPECT_GE(arena.reserved(), base::gib(64));
+    EXPECT_EQ(arena.reserved(), base::mib(512));
     EXPECT_EQ(arena.committed(), 0U);
+}
+
+TEST(Arena, CreateFromSizeUsesTheUnits) {
+    std::optional<Arena> arena = Arena::create(base::mib(1));
+    ASSERT_TRUE(arena.has_value());
+    EXPECT_GE(arena->reserved(), base::mib(1));
+    EXPECT_LT(arena->reserved(), base::mib(1) + base::platform::allocation_granularity());
+}
+
+namespace {
+
+struct alignas(16) Aligned16 {
+    float values[3] = {}; // NOLINT(modernize-avoid-c-arrays): layout under test
+};
+
+static_assert(base::memory::arena_bytes_for<char>(10) == 10U);
+static_assert(base::memory::arena_bytes_for<int>(10) == (10U * sizeof(int)) + alignof(int) - 1U);
+static_assert(base::memory::arena_bytes_for<Aligned16>() == 16U + 15U);
+static_assert(base::memory::arena_bytes_for<Aligned16>(0) == 0U);
+
+} // namespace
+
+TEST(Arena, ArenaBytesForHoldsThePushedArrayAfterAnOddAllocation) {
+    // Fill a whole reservation exactly: the arena must hold the array even when the
+    // previous allocation leaves the worst-case padding in front of it.
+    const std::size_t granularity = base::platform::allocation_granularity();
+    const std::size_t count = (granularity - 1U - (alignof(Aligned16) - 1U)) / sizeof(Aligned16);
+    const std::size_t needed = 1U + base::memory::arena_bytes_for<Aligned16>(count);
+    ASSERT_LE(needed, granularity);
+
+    Arena arena = make_arena({needed, granularity});
+    ASSERT_EQ(arena.reserved(), granularity);
+    ASSERT_NE(arena.allocate(1, 1), nullptr);
+    const std::span<Aligned16> values = arena.push_array<Aligned16>(count);
+    EXPECT_EQ(values.size(), count);
+}
+
+TEST(Arena, SumOfArenaBytesForHoldsMixedPushes) {
+    constexpr std::size_t vertexCount = 10'000;
+    constexpr std::size_t indexCount = 30'000;
+    constexpr std::size_t needed = base::memory::arena_bytes_for<Aligned16>(vertexCount) +
+                                   base::memory::arena_bytes_for<std::uint32_t>(indexCount) +
+                                   base::memory::arena_bytes_for<char>(3);
+
+    Arena arena = make_arena({needed, base::kib(64)});
+    EXPECT_EQ(arena.push_array<char>(3).size(), 3U);
+    EXPECT_EQ(arena.push_array<Aligned16>(vertexCount).size(), vertexCount);
+    EXPECT_EQ(arena.push_array<std::uint32_t>(indexCount).size(), indexCount);
+    EXPECT_LE(arena.used(), needed);
 }
 
 TEST(Arena, EveryPowerOfTwoAlignmentUpToThePageSizeIsHonored) {

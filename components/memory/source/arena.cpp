@@ -67,6 +67,10 @@ std::optional<Arena> Arena::create(const ArenaConfig& config) noexcept {
     return Arena(static_cast<std::byte*>(base), reserveSize, commitStep);
 }
 
+std::optional<Arena> Arena::create(std::size_t reserveSize) noexcept {
+    return create(ArenaConfig{reserveSize, defaultArenaCommitSize});
+}
+
 Arena::Arena(std::byte* base, std::size_t reserved, std::size_t commitStep) noexcept
     : m_base(base)
     , m_reserved(reserved)

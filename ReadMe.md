@@ -17,7 +17,7 @@ core  <──  platform  <──  memory
 
 | Component | Target | Content |
 |---|---|---|
-| `core` | `base::core` | Platform/compiler detection (`config.hpp`), assertions with a replaceable handler (`assert.hpp`), alignment helpers (`bits.hpp`), byte units (`units.hpp`), ASan poisoning macros (`asan.hpp`) |
+| `core` | `base::core` | Platform/compiler detection (`config.hpp`), assertions `BASE_ASSERT(cond)` / `BASE_ASSERT_MSG(cond, msg)` with a replaceable handler and no cost when disabled (`assert.hpp`), alignment helpers (`bits.hpp`), byte units (`units.hpp`), ASan poisoning macros (`asan.hpp`) |
 | `platform` | `base::platform` | Virtual memory: reserve, commit, decommit and release address space (Win32 and POSIX) |
 | `memory` | `base::memory` | `Arena`: a linear allocator over reserved virtual memory |
 
@@ -56,8 +56,15 @@ MSVC cannot link a Debug program against Release libraries.
 ```cpp
 #include <base/memory/arena.hpp>
 
-std::optional<base::memory::Arena> arena = base::memory::Arena::create();  // reserves 64 GiB of address space
+using base::memory::Arena;
+using base::memory::arena_bytes_for;
+
+std::optional<Arena> arena = Arena::create(base::mib(64));          // or Arena::create() for 512 MiB
 Particle* particles = arena->push_array<Particle>(1000).data();
+
+// Size an arena for exactly what it will hold:
+constexpr std::size_t meshSize = arena_bytes_for<Vertex>(10'000) + arena_bytes_for<Index>(30'000);
+std::optional<Arena> meshArena = Arena::create(meshSize);
 
 {
     const base::memory::ArenaScope scratch(*arena);   // temporary allocations ...
@@ -69,11 +76,15 @@ arena->reset();                                        // frees everything, O(1)
 
 The design decisions:
 
-- **Reserve and commit.** `create()` reserves one large contiguous range of
-  address space (`ArenaConfig::reserveSize`, default 64 GiB). That costs no
+- **Reserve and commit.** `create()` reserves one contiguous range of address
+  space (`ArenaConfig::reserveSize`, default 512 MiB). Reserving costs no
   memory. Physical memory is committed in `commitSize` steps (default 64 KiB) as
-  the arena grows. The arena never moves, so pointers stay valid until the arena
-  is rewound past them.
+  the arena grows, so an arena only uses the memory it has handed out. The arena
+  never moves, so pointers stay valid until the arena is rewound past them.
+- **Sizing.** `arena_bytes_for<T>(count)` is the space `count` Ts need,
+  including worst-case alignment padding. The sizes of several types add up to a
+  safe total. Reservations are rounded up to the allocation granularity (64 KiB
+  on Windows).
 - **Linear, no destructors.** Allocation bumps an offset. Memory is never freed
   one allocation at a time. `reset()` frees everything, and `save()` / `restore()`
   or an `ArenaScope` free everything allocated after a point. Destructors never
