@@ -133,6 +133,15 @@
       ]
     },
     {
+      "name": "conf-msvc-release-profile",
+      "displayName": "msvc Release (User Mode) + Profiling",
+      "description": "Target Windows with the msvc compiler, release build type, with profiling zones enabled",
+      "inherits": [
+        "conf-msvc-release",
+        "conf-profile-common"
+      ]
+    },
+    {
       "name": "conf-msvc-relwithdebinfo",
       "displayName": "msvc RelWithDebInfo (User Mode)",
       "description": "Target Windows with the msvc compiler, release with debug info build type",
@@ -187,6 +196,15 @@
       ]
     },
     {
+      "name": "conf-gcc-release-profile",
+      "displayName": "gcc Release + Profiling",
+      "description": "Target Unix-like OS with the gcc compiler, release build type, with profiling zones enabled",
+      "inherits": [
+        "conf-gcc-release",
+        "conf-profile-common"
+      ]
+    },
+    {
       "name": "conf-clang-debug",
       "displayName": "clang Debug",
       "description": "Target Unix-like OS with the clang compiler, debug build type",
@@ -220,6 +238,15 @@
       "inherits": [
         "conf-clang-common",
         "conf-release"
+      ]
+    },
+    {
+      "name": "conf-clang-release-profile",
+      "displayName": "clang Release + Profiling",
+      "description": "Target Unix-like OS with the clang compiler, release build type, with profiling zones enabled",
+      "inherits": [
+        "conf-clang-release",
+        "conf-profile-common"
       ]
     },
     {
@@ -275,6 +302,14 @@
         "CMAKE_EXE_LINKER_FLAGS": "--coverage",
         "CMAKE_SHARED_LINKER_FLAGS": "--coverage",
         "CMAKE_MODULE_LINKER_FLAGS": "--coverage"
+      }
+    },
+    {
+      "name": "conf-profile-common",
+      "description": "Enables the BASE_PROFILE_* zones of the profile component",
+      "hidden": true,
+      "cacheVariables": {
+        "base_PROFILING": "ON"
       }
     },
     {
@@ -460,6 +495,12 @@
       "displayName": "msvc Release Build"
     },
     {
+      "name": "build-msvc-release-profile",
+      "inherits": "build-release",
+      "configurePreset": "conf-msvc-release-profile",
+      "displayName": "msvc Release + Profiling Build"
+    },
+    {
       "name": "build-msvc-relwithdebinfo",
       "inherits": "build-relwithdebinfo",
       "configurePreset": "conf-msvc-relwithdebinfo",
@@ -496,6 +537,12 @@
       "displayName": "gcc Release Build"
     },
     {
+      "name": "build-gcc-release-profile",
+      "inherits": "build-release",
+      "configurePreset": "conf-gcc-release-profile",
+      "displayName": "gcc Release + Profiling Build"
+    },
+    {
       "name": "build-clang-debug",
       "inherits": "build-debug",
       "configurePreset": "conf-clang-debug",
@@ -518,6 +565,12 @@
       "inherits": "build-release",
       "configurePreset": "conf-clang-release",
       "displayName": "clang Release Build"
+    },
+    {
+      "name": "build-clang-release-profile",
+      "inherits": "build-release",
+      "configurePreset": "conf-clang-release-profile",
+      "displayName": "clang Release + Profiling Build"
     },
     {
       "name": "build-gcc-debug-asan",
@@ -699,6 +752,16 @@
       "configurePreset": "conf-msvc-release"
     },
     {
+      "name": "test-msvc-release-profile",
+      "displayName": "msvc Release + Profiling Tests",
+      "description": "Enable output and stop on failure",
+      "inherits": [
+        "test-msvc-common",
+        "test-release"
+      ],
+      "configurePreset": "conf-msvc-release-profile"
+    },
+    {
       "name": "test-msvc-relwithdebinfo",
       "displayName": "msvc RelWithDebInfo Tests",
       "description": "Enable output and stop on failure",
@@ -759,6 +822,16 @@
       "configurePreset": "conf-gcc-release"
     },
     {
+      "name": "test-gcc-release-profile",
+      "displayName": "gcc Release + Profiling Tests",
+      "description": "Enable output and stop on failure",
+      "inherits": [
+        "test-unix-common",
+        "test-release"
+      ],
+      "configurePreset": "conf-gcc-release-profile"
+    },
+    {
       "name": "test-clang-debug",
       "displayName": "clang Debug Tests",
       "description": "Enable output and stop on failure",
@@ -797,6 +870,16 @@
         "test-release"
       ],
       "configurePreset": "conf-clang-release"
+    },
+    {
+      "name": "test-clang-release-profile",
+      "displayName": "clang Release + Profiling Tests",
+      "description": "Enable output and stop on failure",
+      "inherits": [
+        "test-unix-common",
+        "test-release"
+      ],
+      "configurePreset": "conf-clang-release-profile"
     },
     {
       "name": "test-gcc-debug-asan",
@@ -969,6 +1052,25 @@
       ]
     },
     {
+      "name": "workflow-test-clang-release-profile",
+      "displayName": "Clang Release + Profiling Workflow",
+      "description": "Configure, build and test with Clang in one step",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "conf-clang-release-profile"
+        },
+        {
+          "type": "build",
+          "name": "build-clang-release-profile"
+        },
+        {
+          "type": "test",
+          "name": "test-clang-release-profile"
+        }
+      ]
+    },
+    {
       "name": "workflow-test-clang-relwithdebinfo",
       "displayName": "Clang RelWithDebInfo Workflow",
       "description": "Configure, build and test with Clang in one step",
@@ -1045,6 +1147,25 @@
       ]
     },
     {
+      "name": "workflow-test-gcc-release-profile",
+      "displayName": "GCC Release + Profiling Workflow",
+      "description": "Configure, build and test with GCC in one step",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "conf-gcc-release-profile"
+        },
+        {
+          "type": "build",
+          "name": "build-gcc-release-profile"
+        },
+        {
+          "type": "test",
+          "name": "test-gcc-release-profile"
+        }
+      ]
+    },
+    {
       "name": "workflow-test-gcc-relwithdebinfo",
       "displayName": "GCC RelWithDebInfo Workflow",
       "description": "Configure, build and test with GCC in one step",
@@ -1117,6 +1238,25 @@
         {
           "type": "test",
           "name": "test-msvc-release"
+        }
+      ]
+    },
+    {
+      "name": "workflow-test-msvc-release-profile",
+      "displayName": "Windows Release + Profiling Workflow",
+      "description": "Configure, build and test on Windows in one step",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "conf-msvc-release-profile"
+        },
+        {
+          "type": "build",
+          "name": "build-msvc-release-profile"
+        },
+        {
+          "type": "test",
+          "name": "test-msvc-release-profile"
         }
       ]
     },

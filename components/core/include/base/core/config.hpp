@@ -73,4 +73,11 @@
 #endif
 #endif
 
+// Profiling zones (base/profile/profile.hpp) are off unless requested, with the CMake
+// option base_PROFILING or by defining BASE_ENABLE_PROFILING to 1. They do not follow
+// NDEBUG, because timings of unoptimized builds are misleading.
+#ifndef BASE_ENABLE_PROFILING
+#define BASE_ENABLE_PROFILING 0
+#endif
+
 // NOLINTEND(modernize-macro-to-enum, readability-use-concise-preprocessor-directives)

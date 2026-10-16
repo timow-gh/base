@@ -13,6 +13,8 @@ The components are static libraries with no third-party dependencies.
 
 ```
 core  <──  platform  <──  memory
+  ^
+  └──  profile
 ```
 
 | Component | Target | Content |
@@ -20,6 +22,7 @@ core  <──  platform  <──  memory
 | `core` | `base::core` | Platform/compiler detection (`config.hpp`), assertions `BASE_ASSERT(cond)` / `BASE_ASSERT_MSG(cond, msg)` with a replaceable handler and no cost when disabled (`assert.hpp`), alignment helpers (`bits.hpp`), byte units (`units.hpp`), ASan poisoning macros (`asan.hpp`) |
 | `platform` | `base::platform` | Virtual memory: reserve, commit, decommit and release address space (Win32 and POSIX) |
 | `memory` | `base::memory` | `Arena`: a linear allocator over reserved virtual memory |
+| `profile` | `base::profile` | Profiling zones `BASE_PROFILE_SCOPE` / `BASE_PROFILE_FUNCTION` / `BASE_PROFILE_BANDWIDTH`, timed with the CPU timestamp counter and compiled out unless profiling is enabled |
 
 Linking a component links its dependencies too. `base::base` links every
 component that was built.
@@ -114,6 +117,71 @@ The design decisions:
 
 The debug patterns follow `BASE_ENABLE_ASSERTS`, which is on unless `NDEBUG` is
 defined. Define `BASE_ARENA_DEBUG=0/1` when building base to override them.
+
+## Profiling
+
+Mark the code you want to measure with zones. They can stay in the code for good:
+unless profiling is enabled, they compile to nothing. Nothing else is needed: the
+session starts with the first zone, and the report is written when the program
+exits.
+
+```cpp
+#include <base/profile/profile.hpp>
+
+void simulate(World& world) {
+    BASE_PROFILE_FUNCTION();                                   // zone named "simulate"
+    {
+        BASE_PROFILE_SCOPE("broad phase");                     // times the rest of this scope
+        build_grid(world);
+    }
+    BASE_PROFILE_BANDWIDTH("integrate", world.bodies.size_bytes());   // also reports GB/s
+    integrate(world.bodies);
+}
+```
+
+Configure with `-Dbase_PROFILING=ON` and run the program. When it exits, the report
+of a small demo program looks like this on stdout:
+
+```
+Total: 90.37 ms (CPU timer 3.80 GHz)
+zone             hits             exclusive             inclusive      bandwidth
+sum                50       83.20 ms  92.1%       83.20 ms  92.1%     19.23 GB/s
+fib            418050        7.14 ms   7.9%        7.14 ms   7.9%
+frame              50        0.02 ms   0.0%       90.37 ms 100.0%
+fib phase          50        0.01 ms   0.0%        7.15 ms   7.9%
+```
+
+- **Enabling it.** Configure with `-Dbase_PROFILING=ON` (or a `*-release-profile`
+  preset), or define `BASE_ENABLE_PROFILING=1` yourself. It does not follow
+  `NDEBUG`: profile optimized builds, because the timings of debug builds are
+  misleading.
+- **Where the report goes.** To stdout by default. With
+  `-Dbase_PROFILING_REPORT_DIRECTORY=profiles -Dbase_PROFILING_REPORT_NAME=game`
+  it is written to `profiles/game-20261016T134512Z.txt` instead (UTC time, so
+  runs do not overwrite each other), and one line on stdout names the file. The
+  options set the macros `BASE_PROFILE_REPORT_DIRECTORY` and
+  `BASE_PROFILE_REPORT_NAME`, documented in `profile.hpp`. The report is written
+  when the program returns from `main()` or calls `std::exit()`, not after
+  `std::abort()` or a crash.
+- **Optional calls.** `base::profile::reset()` discards what was measured so far,
+  e.g. after loading. `base::profile::report()` writes the report at a point you
+  choose, and `print_report(stream)` writes it to a stream of your own. Both
+  replace the report at exit.
+- **Reading the report.** Zones are sorted by *exclusive* time, the time spent in
+  the zone itself but not in zones nested in it. That is where to look for
+  bottlenecks. *Inclusive* time includes nested zones; a recursive zone is
+  counted once, for its outermost call. Bandwidth is the processed bytes divided
+  by the inclusive time. Compare it with your machine's memory bandwidth to see
+  whether a loop is limited by memory.
+- **Accuracy.** Zones read the CPU's timestamp counter (`rdtsc` on x64,
+  `cntvct_el0` on ARM64) on entry and exit. It is converted to milliseconds with
+  the frequency measured against `steady_clock` over the session, so longer
+  sessions convert more precisely. The cost is about two timer reads per zone:
+  put zones around loops, not inside very hot ones.
+- **Limits.** Only one thread may run zones. The profiler only sees the zones
+  you marked, and it measures wall-clock time, including time when the OS
+  pauses the thread. For "where is the time going at all?", use a sampling
+  profiler.
 
 ## Building and testing
 

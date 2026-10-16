@@ -62,6 +62,11 @@ option(${PROJECT_NAME}_BUILD_DOCUMENTATION "Build API documentation with Doxygen
 # The components are static libraries. PIC lets consumers link them into their
 # own shared libraries.
 option(${PROJECT_NAME}_POSITION_INDEPENDENT_CODE "Compile the components as position independent code" ON)
+option(${PROJECT_NAME}_PROFILING "Enable the BASE_PROFILE_* zones (defines BASE_ENABLE_PROFILING=1)" OFF)
+set(${PROJECT_NAME}_PROFILING_REPORT_DIRECTORY "" CACHE STRING
+        "Directory the profiling report is written to; empty prints it to stdout (BASE_PROFILE_REPORT_DIRECTORY)")
+set(${PROJECT_NAME}_PROFILING_REPORT_NAME "profile" CACHE STRING
+        "File name prefix of the profiling report (BASE_PROFILE_REPORT_NAME)")
 
 if (${PROJECT_NAME}_USE_SCCACHE)
     include(setup_sccache)
@@ -81,6 +86,7 @@ endif ()
 # The component graph, in dependency order. A component may only depend on
 # components declared before it.
 base_declare_component(core)
+base_declare_component(profile DEPENDS core)
 base_declare_component(platform DEPENDS core)
 base_declare_component(memory DEPENDS core platform)
 
