@@ -72,8 +72,8 @@ set(COVERAGE_OUTPUT_DIR "${CMAKE_BINARY_DIR}/coverage_html")
 set(COVERAGE_INFO_FILE "${CMAKE_BINARY_DIR}/coverage.info")
 set(COVERAGE_INFO_FILTERED "${CMAKE_BINARY_DIR}/coverage_filtered.info")
 set(COVERAGE_SOURCE_PATTERNS
-    "${PROJECT_SOURCE_DIR}/src/source/*"
-    "${PROJECT_SOURCE_DIR}/src/include/*")
+    "${PROJECT_SOURCE_DIR}/components/*/source/*"
+    "${PROJECT_SOURCE_DIR}/components/*/include/*")
 
 # Get all registered test targets
 # The coverage expects that all relevant tests are part of the list named: <PROJECT_NAME>_COVERAGE_TESTS

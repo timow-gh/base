@@ -7,12 +7,59 @@ set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel RelWithDebInfo Release Debug
 set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel Debug "")
 set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel Debug "")
 
-# No find_dependency() calls: base links its third-party dependencies statically
-# and build-only ($<BUILD_LOCAL_INTERFACE:...>), so the installed shared library
-# is self-contained and consumers need nothing but this package.
+# No find_dependency() calls: @project_name@ has no third-party dependencies.
 
-# Include the targets file
-include("${CMAKE_CURRENT_LIST_DIR}/@project_name@Targets.cmake")
+# Installed components, in dependency order.
+set(@project_name@_INSTALLED_COMPONENTS "@installed_components@")
 
-# Verify that all required components have been found
+# find_package(@project_name@) without COMPONENTS loads everything that is installed.
+set(_@project_name@_requested ${@project_name@_FIND_COMPONENTS})
+if (NOT _@project_name@_requested)
+    set(_@project_name@_requested ${@project_name@_INSTALLED_COMPONENTS})
+endif ()
+
+# Collect the requested components and their transitive dependencies.
+set(_@project_name@_load "")
+set(_@project_name@_pending ${_@project_name@_requested})
+while (_@project_name@_pending)
+    list(POP_FRONT _@project_name@_pending _@project_name@_component)
+    if (_@project_name@_component IN_LIST _@project_name@_load)
+        continue()
+    endif ()
+    if (NOT _@project_name@_component IN_LIST @project_name@_INSTALLED_COMPONENTS)
+        set(@project_name@_${_@project_name@_component}_FOUND FALSE)
+        set(@project_name@_NOT_FOUND_MESSAGE
+                "Component '${_@project_name@_component}' is not part of this installation (installed: ${@project_name@_INSTALLED_COMPONENTS})")
+        continue()
+    endif ()
+    include("${CMAKE_CURRENT_LIST_DIR}/@project_name@_${_@project_name@_component}Dependencies.cmake")
+    list(APPEND _@project_name@_load ${_@project_name@_component})
+    list(APPEND _@project_name@_pending ${@project_name@_${_@project_name@_component}_DEPENDS})
+endwhile ()
+
+# Load the target files in dependency order: each one checks that the targets it
+# references from other components already exist.
+foreach (_@project_name@_component IN LISTS @project_name@_INSTALLED_COMPONENTS)
+    if (_@project_name@_component IN_LIST _@project_name@_load)
+        if (NOT TARGET @project_name@::${_@project_name@_component})
+            include("${CMAKE_CURRENT_LIST_DIR}/@project_name@_${_@project_name@_component}Targets.cmake")
+        endif ()
+        set(@project_name@_${_@project_name@_component}_FOUND TRUE)
+    endif ()
+endforeach ()
+
+# The umbrella target only exists when everything was loaded, so it never
+# silently means "whatever an earlier find_package() call happened to load".
+if (NOT @project_name@_FIND_COMPONENTS AND NOT TARGET @project_name@::@project_name@)
+    add_library(@project_name@::@project_name@ INTERFACE IMPORTED)
+    foreach (_@project_name@_component IN LISTS _@project_name@_load)
+        target_link_libraries(@project_name@::@project_name@ INTERFACE @project_name@::${_@project_name@_component})
+    endforeach ()
+endif ()
+
+unset(_@project_name@_requested)
+unset(_@project_name@_load)
+unset(_@project_name@_pending)
+unset(_@project_name@_component)
+
 check_required_components(@project_name@)

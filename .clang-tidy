@@ -63,7 +63,15 @@ modernize-use-uncaught-exceptions,
 modernize-use-using,
 clang-analyzer-*,
 -clang-analyzer-optin.cplusplus.UninitializedObject,
--misc-const-correctness,-misc-unused-parameters,-misc-non-private-member-variables-in-classes,-misc-no-recursion,-misc-use-anonymous-namespace,-misc-include-cleaner,readability-identifier-naming,-readability-identifier-length'
+-misc-const-correctness,-misc-unused-parameters,-misc-non-private-member-variables-in-classes,-misc-no-recursion,-misc-use-anonymous-namespace,-misc-include-cleaner,readability-identifier-naming,-readability-identifier-length,
+-llvm-header-guard,
+-llvm-prefer-static-over-anonymous-namespace'
+
+# Headers use #pragma once (llvm-header-guard) and internal linkage uses anonymous
+# namespaces as the C++ Core Guidelines recommend (llvm-prefer-static-...).
+
+# Analyze the library's own headers, but not those of third-party dependencies.
+HeaderFilterRegex: '.*[/\\]components[/\\].*'
 
 # cppcoreguidelines-pro-bounds-pointer-arithmetic
 # cppcoreguidelines-pro-bounds-constant-array-index # Removed, too many false positives
@@ -90,3 +98,6 @@ CheckOptions:
     value: 1
   - key: modernize-use-default-member-init.UseAssignment
     value: 1
+  # The library's own macros (assertions, platform detection) are deliberate.
+  - key: cppcoreguidelines-macro-usage.AllowedRegexp
+    value: '^BASE_'

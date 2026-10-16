@@ -1,0 +1,69 @@
+#include "base/platform/virtual_memory.hpp"
+
+#include "base/core/assert.hpp"
+#include "base/core/bits.hpp"
+
+#include <cstdint>
+
+#include <sys/mman.h>
+#include <unistd.h>
+
+namespace base::platform {
+
+namespace {
+
+// Reserved address space must not count against the commit limit; only committed
+// pages should. Not every POSIX system defines MAP_NORESERVE.
+#ifdef MAP_NORESERVE
+constexpr int reserveFlags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
+#else
+constexpr int reserveFlags = MAP_PRIVATE | MAP_ANONYMOUS;
+#endif
+
+[[nodiscard]] bool is_page_range(const void* address, std::size_t size) noexcept {
+    return size > 0U && is_aligned(reinterpret_cast<std::uintptr_t>(address), page_size()) && // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+           is_aligned(size, page_size());
+}
+
+[[nodiscard]] bool is_map_failed(const void* address) noexcept {
+    return address == MAP_FAILED; // NOLINT(cppcoreguidelines-pro-type-cstyle-cast): system macro
+}
+
+} // namespace
+
+std::size_t page_size() noexcept {
+    static const auto size = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+    return size;
+}
+
+std::size_t allocation_granularity() noexcept {
+    return page_size();
+}
+
+void* reserve(std::size_t size) noexcept {
+    BASE_ASSERT(size > 0U && is_aligned(size, allocation_granularity()),
+                "reserve size must be a non-zero multiple of the allocation granularity");
+    void* address = mmap(nullptr, size, PROT_NONE, reserveFlags, -1, 0);
+    return is_map_failed(address) ? nullptr : address;
+}
+
+bool commit(void* address, std::size_t size) noexcept {
+    BASE_ASSERT(is_page_range(address, size), "commit range must be page aligned");
+    return mprotect(address, size, PROT_READ | PROT_WRITE) == 0;
+}
+
+void decommit(void* address, std::size_t size) noexcept {
+    BASE_ASSERT(is_page_range(address, size), "decommit range must be page aligned");
+    // Mapping fresh PROT_NONE pages over the range drops the physical pages and
+    // guarantees zeroed memory on the next commit on every POSIX system, unlike
+    // madvise(), whose semantics differ between Linux and macOS.
+    [[maybe_unused]] void* const remapped = mmap(address, size, PROT_NONE, reserveFlags | MAP_FIXED, -1, 0);
+    BASE_ASSERT(!is_map_failed(remapped), "mmap(MAP_FIXED) failed to decommit");
+}
+
+void release(void* address, std::size_t size) noexcept {
+    BASE_ASSERT(address != nullptr, "release of a null range");
+    BASE_VERIFY(munmap(address, size) == 0, "munmap failed");
+}
+
+} // namespace base::platform
