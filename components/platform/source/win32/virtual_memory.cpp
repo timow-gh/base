@@ -20,7 +20,8 @@ const SYSTEM_INFO& system_info() noexcept {
     return info;
 }
 
-[[nodiscard]] bool is_page_range(const void* address, std::size_t size) noexcept {
+// Only used in assertions, which release builds leave unevaluated.
+[[nodiscard, maybe_unused]] bool is_page_range(const void* address, std::size_t size) noexcept {
     return size > 0U && is_aligned(reinterpret_cast<std::uintptr_t>(address), page_size()) && // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
            is_aligned(size, page_size());
 }
