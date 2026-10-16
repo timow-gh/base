@@ -24,7 +24,7 @@ template <std::unsigned_integral T>
  */
 template <std::unsigned_integral T>
 [[nodiscard]] constexpr T align_up(T value, T alignment) noexcept {
-    BASE_ASSERT(is_power_of_two(alignment), "alignment must be a power of two");
+    BASE_ASSERT(is_power_of_two(alignment));
     const T mask = static_cast<T>(alignment - 1U);
     return static_cast<T>((value + mask) & static_cast<T>(~mask));
 }
@@ -35,7 +35,7 @@ template <std::unsigned_integral T>
  */
 template <std::unsigned_integral T>
 [[nodiscard]] constexpr T align_down(T value, T alignment) noexcept {
-    BASE_ASSERT(is_power_of_two(alignment), "alignment must be a power of two");
+    BASE_ASSERT(is_power_of_two(alignment));
     const T mask = static_cast<T>(alignment - 1U);
     return static_cast<T>(value & static_cast<T>(~mask));
 }
@@ -46,7 +46,7 @@ template <std::unsigned_integral T>
  */
 template <std::unsigned_integral T>
 [[nodiscard]] constexpr bool is_aligned(T value, T alignment) noexcept {
-    BASE_ASSERT(is_power_of_two(alignment), "alignment must be a power of two");
+    BASE_ASSERT(is_power_of_two(alignment));
     return (value & static_cast<T>(alignment - 1U)) == 0U;
 }
 

@@ -36,25 +36,25 @@ std::size_t allocation_granularity() noexcept {
 }
 
 void* reserve(std::size_t size) noexcept {
-    BASE_ASSERT(size > 0U && is_aligned(size, allocation_granularity()),
-                "reserve size must be a non-zero multiple of the allocation granularity");
+    BASE_ASSERT_MSG(size > 0U && is_aligned(size, allocation_granularity()),
+                    "reserve size must be a non-zero multiple of the allocation granularity");
     return VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_NOACCESS);
 }
 
 bool commit(void* address, std::size_t size) noexcept {
-    BASE_ASSERT(is_page_range(address, size), "commit range must be page aligned");
+    BASE_ASSERT(is_page_range(address, size));
     return VirtualAlloc(address, size, MEM_COMMIT, PAGE_READWRITE) != nullptr;
 }
 
 void decommit(void* address, std::size_t size) noexcept {
-    BASE_ASSERT(is_page_range(address, size), "decommit range must be page aligned");
-    BASE_VERIFY(VirtualFree(address, size, MEM_DECOMMIT) != 0, "VirtualFree(MEM_DECOMMIT) failed");
+    BASE_ASSERT(is_page_range(address, size));
+    BASE_VERIFY_MSG(VirtualFree(address, size, MEM_DECOMMIT) != 0, "VirtualFree(MEM_DECOMMIT) failed");
 }
 
 void release(void* address, [[maybe_unused]] std::size_t size) noexcept {
-    BASE_ASSERT(address != nullptr, "release of a null range");
+    BASE_ASSERT(address != nullptr);
     // MEM_RELEASE always frees the whole reservation and requires a size of 0.
-    BASE_VERIFY(VirtualFree(address, 0, MEM_RELEASE) != 0, "VirtualFree(MEM_RELEASE) failed");
+    BASE_VERIFY_MSG(VirtualFree(address, 0, MEM_RELEASE) != 0, "VirtualFree(MEM_RELEASE) failed");
 }
 
 } // namespace base::platform

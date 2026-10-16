@@ -41,29 +41,29 @@ std::size_t allocation_granularity() noexcept {
 }
 
 void* reserve(std::size_t size) noexcept {
-    BASE_ASSERT(size > 0U && is_aligned(size, allocation_granularity()),
-                "reserve size must be a non-zero multiple of the allocation granularity");
+    BASE_ASSERT_MSG(size > 0U && is_aligned(size, allocation_granularity()),
+                    "reserve size must be a non-zero multiple of the allocation granularity");
     void* address = mmap(nullptr, size, PROT_NONE, reserveFlags, -1, 0);
     return is_map_failed(address) ? nullptr : address;
 }
 
 bool commit(void* address, std::size_t size) noexcept {
-    BASE_ASSERT(is_page_range(address, size), "commit range must be page aligned");
+    BASE_ASSERT(is_page_range(address, size));
     return mprotect(address, size, PROT_READ | PROT_WRITE) == 0;
 }
 
 void decommit(void* address, std::size_t size) noexcept {
-    BASE_ASSERT(is_page_range(address, size), "decommit range must be page aligned");
+    BASE_ASSERT(is_page_range(address, size));
     // Mapping fresh PROT_NONE pages over the range drops the physical pages and
     // guarantees zeroed memory on the next commit on every POSIX system, unlike
     // madvise(), whose semantics differ between Linux and macOS.
     [[maybe_unused]] void* const remapped = mmap(address, size, PROT_NONE, reserveFlags | MAP_FIXED, -1, 0);
-    BASE_ASSERT(!is_map_failed(remapped), "mmap(MAP_FIXED) failed to decommit");
+    BASE_ASSERT_MSG(!is_map_failed(remapped), "mmap(MAP_FIXED) failed to decommit");
 }
 
 void release(void* address, std::size_t size) noexcept {
-    BASE_ASSERT(address != nullptr, "release of a null range");
-    BASE_VERIFY(munmap(address, size) == 0, "munmap failed");
+    BASE_ASSERT(address != nullptr);
+    BASE_VERIFY_MSG(munmap(address, size) == 0, "munmap failed");
 }
 
 } // namespace base::platform

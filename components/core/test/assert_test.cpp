@@ -41,30 +41,76 @@ private:
 
 } // namespace
 
-TEST_F(AssertTest, PassingAssertionDoesNotCallHandler) {
-    BASE_ASSERT(1 + 1 == 2, "arithmetic works");
+TEST_F(AssertTest, PassingAssertionsDoNotCallHandler) {
+    BASE_ASSERT(1 + 1 == 2);
+    BASE_ASSERT_MSG(1 + 1 == 2, "arithmetic works");
     EXPECT_EQ(recorded().count, 0);
 }
 
-TEST_F(AssertTest, FailingAssertionCallsHandlerWithExpressionMessageAndLocation) {
+TEST_F(AssertTest, FailingAssertReportsExpressionAndEmptyMessage) {
 #if BASE_ENABLE_ASSERTS
     const unsigned expectedLine = __LINE__ + 1;
-    BASE_ASSERT(1 + 1 == 3, "arithmetic is broken");
+    BASE_ASSERT(1 + 1 == 3);
+    EXPECT_EQ(recorded().count, 1);
+    EXPECT_EQ(recorded().expression, "1 + 1 == 3");
+    EXPECT_TRUE(recorded().message.empty());
+    EXPECT_EQ(recorded().line, expectedLine);
+#else
+    GTEST_SKIP() << "assertions are disabled";
+#endif
+}
+
+TEST_F(AssertTest, FailingAssertMsgReportsExpressionMessageAndLocation) {
+#if BASE_ENABLE_ASSERTS
+    const unsigned expectedLine = __LINE__ + 1;
+    BASE_ASSERT_MSG(1 + 1 == 3, "arithmetic is broken");
     EXPECT_EQ(recorded().count, 1);
     EXPECT_EQ(recorded().expression, "1 + 1 == 3");
     EXPECT_EQ(recorded().message, "arithmetic is broken");
     EXPECT_EQ(recorded().line, expectedLine);
 #else
-    BASE_ASSERT(1 + 1 == 3, "compiled out");
-    EXPECT_EQ(recorded().count, 0);
+    GTEST_SKIP() << "assertions are disabled";
 #endif
 }
 
+// Disabled assertions must cost nothing at runtime: the condition, including its
+// side effects, is not evaluated. Clang rightly warns about side effects in an
+// unevaluated operand; here they are the point of the test.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunevaluated-expression"
+#endif
+TEST_F(AssertTest, DisabledAssertionsDoNotEvaluateTheCondition) {
+    int evaluations = 0;
+    BASE_ASSERT(++evaluations > 0);
+    BASE_ASSERT_MSG(++evaluations > 0, "counted");
+#if BASE_ENABLE_ASSERTS
+    EXPECT_EQ(evaluations, 2);
+#else
+    EXPECT_EQ(evaluations, 0);
+#endif
+    EXPECT_EQ(recorded().count, 0);
+}
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+
 TEST_F(AssertTest, VerifyEvaluatesConditionInEveryBuild) {
     int evaluations = 0;
-    BASE_VERIFY(++evaluations == 1, "side effect must happen");
-    EXPECT_EQ(evaluations, 1);
+    BASE_VERIFY(++evaluations == 1);
+    BASE_VERIFY_MSG(++evaluations == 2, "side effect must happen");
+    EXPECT_EQ(evaluations, 2);
     EXPECT_EQ(recorded().count, 0);
+}
+
+TEST_F(AssertTest, FailingVerifyReportsInBuildsWithAssertions) {
+    BASE_VERIFY_MSG(1 + 1 == 3, "verify failed");
+#if BASE_ENABLE_ASSERTS
+    EXPECT_EQ(recorded().count, 1);
+    EXPECT_EQ(recorded().message, "verify failed");
+#else
+    EXPECT_EQ(recorded().count, 0);
+#endif
 }
 
 TEST_F(AssertTest, SetAssertHandlerReturnsPreviousHandler) {

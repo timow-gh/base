@@ -15,12 +15,14 @@ void default_assert_handler(std::string_view expression,
                             std::string_view message,
                             const std::source_location& location) {
     std::println(stderr,
-                 "{}:{}: assertion failed: {}\n  in {}\n  {}",
+                 "{}:{}: assertion failed: {}\n  in {}",
                  location.file_name(),
                  location.line(),
                  expression,
-                 location.function_name(),
-                 message);
+                 location.function_name());
+    if (!message.empty()) {
+        std::println(stderr, "  {}", message);
+    }
     std::fflush(stderr);
     std::abort();
 }

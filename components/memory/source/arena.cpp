@@ -117,8 +117,8 @@ void* Arena::allocate_zeroed(std::size_t size, std::size_t alignment) noexcept {
 }
 
 void* Arena::allocate_impl(std::size_t size, std::size_t alignment, Fill fill) noexcept {
-    BASE_ASSERT(is_power_of_two(alignment), "alignment must be a power of two");
-    BASE_ASSERT(alignment <= platform::page_size(), "alignment larger than the page size is not supported");
+    BASE_ASSERT(is_power_of_two(alignment));
+    BASE_ASSERT_MSG(alignment <= platform::page_size(), "alignment larger than the page size is not supported");
 
     // The reservation is aligned to the allocation granularity, which is a multiple
     // of every supported alignment, so aligning the offset aligns the address, and
@@ -174,7 +174,7 @@ bool Arena::commit_up_to(std::size_t end) noexcept {
 }
 
 void Arena::restore(Marker marker) noexcept {
-    BASE_ASSERT(marker.offset <= m_offset, "restore to a marker past the current position");
+    BASE_ASSERT_MSG(marker.offset <= m_offset, "restore to a marker past the current position");
     if (marker.offset >= m_offset) {
         return;
     }
