@@ -63,7 +63,8 @@ void decommit(void* address, std::size_t size) noexcept {
 
 void release(void* address, std::size_t size) noexcept {
     BASE_ASSERT(address != nullptr);
-    BASE_VERIFY_MSG(munmap(address, size) == 0, "munmap failed");
+    [[maybe_unused]] const int unmapped = munmap(address, size);
+    BASE_ASSERT_MSG(unmapped == 0, "munmap failed");
 }
 
 } // namespace base::platform

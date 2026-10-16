@@ -14,7 +14,7 @@ namespace base {
  * return, in which case execution continues after the failed assertion; that is only
  * meant for tests that check that an assertion fires.
  *
- * \param message Empty for the condition-only macros (BASE_ASSERT, BASE_VERIFY).
+ * \param message Empty for BASE_ASSERT.
  */
 using AssertHandler = void (*)(std::string_view expression,
                                std::string_view message,
@@ -61,20 +61,4 @@ void assert_failed(std::string_view expression,
 // that stopped compiling is noticed in release builds too.
 #define BASE_ASSERT(condition) static_cast<void>(sizeof((condition) ? 1 : 0))
 #define BASE_ASSERT_MSG(condition, message) static_cast<void>(sizeof((condition) ? 1 : 0))
-#endif
-
-#if BASE_ENABLE_ASSERTS
-/**
- * \brief Like BASE_ASSERT, but `condition` is evaluated in every build. Use it when
- * the expression has a side effect that must happen.
- */
-#define BASE_VERIFY(condition) BASE_ASSERT_MSG(condition, "")
-
-/**
- * \brief Like BASE_VERIFY, with a message that explains the failure.
- */
-#define BASE_VERIFY_MSG(condition, message) BASE_ASSERT_MSG(condition, message)
-#else
-#define BASE_VERIFY(condition) static_cast<void>(condition)
-#define BASE_VERIFY_MSG(condition, message) static_cast<void>(condition)
 #endif

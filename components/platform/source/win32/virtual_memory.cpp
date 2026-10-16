@@ -48,13 +48,15 @@ bool commit(void* address, std::size_t size) noexcept {
 
 void decommit(void* address, std::size_t size) noexcept {
     BASE_ASSERT(is_page_range(address, size));
-    BASE_VERIFY_MSG(VirtualFree(address, size, MEM_DECOMMIT) != 0, "VirtualFree(MEM_DECOMMIT) failed");
+    [[maybe_unused]] const BOOL decommitted = VirtualFree(address, size, MEM_DECOMMIT);
+    BASE_ASSERT_MSG(decommitted != 0, "VirtualFree(MEM_DECOMMIT) failed");
 }
 
 void release(void* address, [[maybe_unused]] std::size_t size) noexcept {
     BASE_ASSERT(address != nullptr);
     // MEM_RELEASE always frees the whole reservation and requires a size of 0.
-    BASE_VERIFY_MSG(VirtualFree(address, 0, MEM_RELEASE) != 0, "VirtualFree(MEM_RELEASE) failed");
+    [[maybe_unused]] const BOOL released = VirtualFree(address, 0, MEM_RELEASE);
+    BASE_ASSERT_MSG(released != 0, "VirtualFree(MEM_RELEASE) failed");
 }
 
 } // namespace base::platform

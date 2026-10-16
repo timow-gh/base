@@ -95,24 +95,6 @@ TEST_F(AssertTest, DisabledAssertionsDoNotEvaluateTheCondition) {
 #pragma clang diagnostic pop
 #endif
 
-TEST_F(AssertTest, VerifyEvaluatesConditionInEveryBuild) {
-    int evaluations = 0;
-    BASE_VERIFY(++evaluations == 1);
-    BASE_VERIFY_MSG(++evaluations == 2, "side effect must happen");
-    EXPECT_EQ(evaluations, 2);
-    EXPECT_EQ(recorded().count, 0);
-}
-
-TEST_F(AssertTest, FailingVerifyReportsInBuildsWithAssertions) {
-    BASE_VERIFY_MSG(1 + 1 == 3, "verify failed");
-#if BASE_ENABLE_ASSERTS
-    EXPECT_EQ(recorded().count, 1);
-    EXPECT_EQ(recorded().message, "verify failed");
-#else
-    EXPECT_EQ(recorded().count, 0);
-#endif
-}
-
 TEST_F(AssertTest, SetAssertHandlerReturnsPreviousHandler) {
     const base::AssertHandler current = base::set_assert_handler(nullptr);
     EXPECT_EQ(current, &recording_handler);
