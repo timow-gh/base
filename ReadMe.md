@@ -1,10 +1,10 @@
-[![Ubuntu Build](https://github.com/timow-gh/cpplib/actions/workflows/ubuntu-build.yml/badge.svg?branch=main)](https://github.com/timow-gh/cpplib/actions/workflows/ubuntu-build.yml)
-[![Windows Build](https://github.com/timow-gh/cpplib/actions/workflows/windows-build.yml/badge.svg)](https://github.com/timow-gh/cpplib/actions/workflows/windows-build.yml)
+[![Ubuntu Build](https://github.com/timow-gh/base/actions/workflows/ubuntu-build.yml/badge.svg?branch=main)](https://github.com/timow-gh/base/actions/workflows/ubuntu-build.yml)
+[![Windows Build](https://github.com/timow-gh/base/actions/workflows/windows-build.yml/badge.svg)](https://github.com/timow-gh/base/actions/workflows/windows-build.yml)
 
-# cpplib
+# base
 
-cpplib is a template for a native C++ project. A single CMake build compiles a
-library (`cpplib`), an application (`cpplib_app`) and the tests from source. CPack
+base is a template for a native C++ project. A single CMake build compiles a
+library (`base`), an application (`base_app`) and the tests from source. CPack
 then ships the application as a native package: a TGZ or DEB on Linux, a ZIP or MSI
 on Windows.
 
@@ -23,15 +23,15 @@ Prerequisites:
 
 ```sh
 cmake --workflow --preset workflow-test-gcc-release   # or -clang- / -msvc-
-./out/build/conf-gcc-release/app/cpplib_app           # Windows: out\build\conf-msvc-release\bin\Release\cpplib_app.exe
+./out/build/conf-gcc-release/app/base_app           # Windows: out\build\conf-msvc-release\bin\Release\base_app.exe
 ```
 
 ## Project layout
 
 | Path | Content |
 |---|---|
-| `src/` | The library `cpplib` (exported as `cpplib::cpplib`), public headers in `src/include/cpplib/` |
-| `app/` | The application `cpplib_app` |
+| `src/` | The library `base` (exported as `base::base`), public headers in `src/include/base/` |
+| `app/` | The application `base_app` |
 | `test/` | Unit tests (GoogleTest), the delivery check and the SDK install test |
 | `cmake/` | Helper modules: warnings, static analysis, packaging, WiX installer files |
 | `cmake/product_identity.cmake` | Vendor, contact and the MSI upgrade code of the product (design decision 10) |
@@ -41,7 +41,7 @@ cmake --workflow --preset workflow-test-gcc-release   # or -clang- / -msvc-
 | `CMakePresets.json` | All configure, build, test, package and workflow presets |
 
 Every target is part of the same build. The application links the library through
-its alias target (`target_link_libraries(cpplib_app PRIVATE cpplib::cpplib)`). Nothing
+its alias target (`target_link_libraries(base_app PRIVATE base::base)`). Nothing
 has to be installed before you can build, run or test anything. Installing and
 packaging only happen when the result is delivered.
 
@@ -50,18 +50,18 @@ packaging only happen when the result is delivered.
 ### 1. Third-party dependencies are static and build-only
 
 ```cmake
-target_link_libraries(cpplib PRIVATE $<BUILD_LOCAL_INTERFACE:fmt::fmt>)
+target_link_libraries(base PRIVATE $<BUILD_LOCAL_INTERFACE:fmt::fmt>)
 ```
 
 - **Static:** vcpkg builds `fmt` as a static library. The default Linux triplet is
   static, and on Windows the presets pick a `*-static*` triplet (see 3). fmt's code
-  is linked into whatever links cpplib, so no `fmt.dll` / `libfmt.so` is ever shipped.
-- **`PRIVATE`:** fmt is an implementation detail. It never shows up in cpplib's public
-  headers or in the usage requirements of targets that link cpplib.
+  is linked into whatever links base, so no `fmt.dll` / `libfmt.so` is ever shipped.
+- **`PRIVATE`:** fmt is an implementation detail. It never shows up in base's public
+  headers or in the usage requirements of targets that link base.
 - **`$<BUILD_LOCAL_INTERFACE:...>`:** fmt is used inside this build but is not written
-  into the installed CMake package. `cpplibConfig.cmake` therefore has no
-  `find_dependency()`. A project that uses the installed cpplib needs nothing but
-  cpplib.
+  into the installed CMake package. `baseConfig.cmake` therefore has no
+  `find_dependency()`. A project that uses the installed base needs nothing but
+  base.
 
 Every new third-party dependency should follow the same pattern: add it to
 `vcpkg.json`, then `find_package()` it and link it
@@ -78,13 +78,13 @@ There is one application, and it can be delivered in two ways:
 
 | Delivery mode | Presets | `BUILD_SHARED_LIBS` | What ships |
 |---|---|---|---|
-| **shared** (default) | `conf-<compiler>-<config>` | `ON` | `cpplib_app` + `cpplib.dll` / `libcpplib.so.0` (+ MSVC runtime DLLs), and the library SDK |
-| **standalone** | `conf-<compiler>-release-standalone` | `OFF` | only the `cpplib_app` executable |
+| **shared** (default) | `conf-<compiler>-<config>` | `ON` | `base_app` + `base.dll` / `libbase.so.0` (+ MSVC runtime DLLs), and the library SDK |
+| **standalone** | `conf-<compiler>-release-standalone` | `OFF` | only the `base_app` executable |
 
 - **shared:** the application is the executable plus the project's *own* DLL. All
-  third-party code is inside `cpplib.dll`. You can update the library without
+  third-party code is inside `base.dll`. You can update the library without
   relinking the application, and other programs can use the SDK.
-- **standalone:** cpplib and fmt are linked statically into the executable. A single
+- **standalone:** base and fmt are linked statically into the executable. A single
   file is all you ship.
 
 The mode is a per-configure setting because the vcpkg triplet, and with it the
@@ -109,8 +109,8 @@ Why the static CRT for the standalone exe:
 
 Why the dynamic CRT for the exe + DLL mode:
 - **One shared heap.** With `/MT`, every DLL gets its own copy of the CRT: its own
-  heap, `errno`, locale, and `FILE*` table. Memory allocated in `cpplib.dll` would
-  have to be freed in `cpplib.dll`. Passing a `std::string` or `std::vector` across
+  heap, `errno`, locale, and `FILE*` table. Memory allocated in `base.dll` would
+  have to be freed in `base.dll`. Passing a `std::string` or `std::vector` across
   the DLL boundary, which is natural for a C++ API, can then corrupt the heap. With
   `/MD`, all modules share one CRT and such APIs are safe (with the same toolset).
 - **Servicing.** The Universal CRT is part of Windows 10 and later and is updated by
@@ -127,8 +127,8 @@ the case where `/MT` is the better choice.
 ### 4. The library SDK is installed from shared builds only
 
 In shared builds, `cmake --install` installs the library SDK. It is used by other
-projects through `find_package(cpplib)`. In static builds the SDK is not installed:
-a static `cpplib` archive does not contain fmt, and fmt is deliberately not part of
+projects through `find_package(base)`. In static builds the SDK is not installed:
+a static `base` archive does not contain fmt, and fmt is deliberately not part of
 the exported package (see 1). Static builds deliver the standalone application
 instead.
 
@@ -147,14 +147,14 @@ declares. The delivery check (see 8) verifies that this list is complete.
 ### 6. Relocatable Linux installs
 
 `cmake/project_preamble.cmake` sets the install RPATH to `$ORIGIN:$ORIGIN/../lib`.
-The installed `bin/cpplib_app` finds `lib/libcpplib.so.0` relative to itself,
+The installed `bin/base_app` finds `lib/libbase.so.0` relative to itself,
 wherever the archive is extracted. No `LD_LIBRARY_PATH` is needed. On Windows,
 executables and DLLs share one output and install directory (`bin`).
 
 ### 7. Hidden symbols and a generated export header
 
 Symbols are hidden by default (`CMAKE_CXX_VISIBILITY_PRESET hidden`). Only functions
-marked `CPPLIB_EXPORT`, from the generated `cpplib/cpplib_export.h`, form the ABI of
+marked `BASE_EXPORT`, from the generated `base/base_export.h`, form the ABI of
 the shared library. This keeps the DLL interface small and gives GCC/Clang and MSVC
 the same behavior.
 
@@ -162,19 +162,19 @@ the same behavior.
 
 | Test | What it checks |
 |---|---|
-| `TestcpplibDelivery` (`test/test_delivery/`) | Installs the application's components into a temporary prefix. Checks that the installed files match the expected list for the delivery mode, runs the installed app, and checks with `file(GET_RUNTIME_DEPENDENCIES)` that it only depends on system libraries, cpplib and the MSVC runtime. A third-party DLL fails the test. |
-| `TestcpplibInstall` (`test/test_install/`, shared only) | Installs the SDK. Builds a separate consumer project (`test/test_install/consumer/`) against it **without vcpkg**, and runs it. |
+| `TestbaseDelivery` (`test/test_delivery/`) | Installs the application's components into a temporary prefix. Checks that the installed files match the expected list for the delivery mode, runs the installed app, and checks with `file(GET_RUNTIME_DEPENDENCIES)` that it only depends on system libraries, base and the MSVC runtime. A third-party DLL fails the test. |
+| `TestbaseInstall` (`test/test_install/`, shared only) | Installs the SDK. Builds a separate consumer project (`test/test_install/consumer/`) against it **without vcpkg**, and runs it. |
 | Release `verify-packages` job | Installs the real DEBs in a clean `ubuntu:24.04` container and the MSI silently on Windows, runs the app from the TGZ and ZIP, and builds against the `-dev` DEB. A release is only published when this job passes. |
 
 ### 9. Every name derives from the project name
 
-The project name in `project(cpplib ...)` is the only place the name is set. Everything
+The project name in `project(base ...)` is the only place the name is set. Everything
 else follows from it:
-- the library target and CMake package (`cpplib`, `cpplib::cpplib`, `find_package(cpplib)`);
-- the export macro (`CPPLIB_EXPORT`, generated);
-- the application target (`cpplib_app`);
-- the options (`cpplib_TESTS`, …) and test names (`TestcpplibDelivery`, …);
-- the package names (`cpplib-app`, `libcpplib0`, `libcpplib-dev`);
+- the library target and CMake package (`base`, `base::base`, `find_package(base)`);
+- the export macro (`BASE_EXPORT`, generated);
+- the application target (`base_app`);
+- the options (`base_TESTS`, …) and test names (`TestbaseDelivery`, …);
+- the package names (`base-app`, `libbase0`, `libbase-dev`);
 - the installer folder and registry key;
 - the names the release workflow uses.
 
@@ -224,18 +224,18 @@ cmake --workflow --preset workflow-test-gcc-release-standalone
 cmake --workflow --preset workflow-test-gcc-debug-asan
 ```
 
-Options (default ON when cpplib is the top-level project):
+Options (default ON when base is the top-level project):
 
 | Option | Meaning |
 |---|---|
-| `cpplib_APP` | Build `cpplib_app` |
-| `cpplib_TESTS` | Build the tests |
-| `cpplib_TEST_INSTALL` | Register `TestcpplibInstall` (OFF in coverage builds) |
-| `cpplib_INSTALL` | Generate install rules |
-| `cpplib_PACK` | Configure CPack |
-| `cpplib_USE_WARNINGS`, `cpplib_WARNINGS_AS_ERRORS` | Compiler warnings, as errors |
-| `cpplib_STATIC_ANALYSIS` | clang-tidy (Clang) / MSVC code analysis |
-| `cpplib_USE_SCCACHE`, `cpplib_USE_CPPCHECK`, `cpplib_BUILD_DOCUMENTATION` | Optional tooling (OFF by default) |
+| `base_APP` | Build `base_app` |
+| `base_TESTS` | Build the tests |
+| `base_TEST_INSTALL` | Register `TestbaseInstall` (OFF in coverage builds) |
+| `base_INSTALL` | Generate install rules |
+| `base_PACK` | Configure CPack |
+| `base_USE_WARNINGS`, `base_WARNINGS_AS_ERRORS` | Compiler warnings, as errors |
+| `base_STATIC_ANALYSIS` | clang-tidy (Clang) / MSVC code analysis |
+| `base_USE_SCCACHE`, `base_USE_CPPCHECK`, `base_BUILD_DOCUMENTATION` | Optional tooling (OFF by default) |
 
 ## Shipping the application
 
@@ -249,18 +249,18 @@ Packages land in `out/packages/package-<compiler>-release-<mode>/`, each with a
 
 | | shared | standalone |
 |---|---|---|
-| Linux TGZ | `cpplib-<ver>-linux-x86_64.tar.gz`: app, `libcpplib.so.0`, SDK | `cpplib-standalone-<ver>-linux-x86_64.tar.gz`: app |
-| Linux DEB | `cpplib-app` → depends on `libcpplib0`; `libcpplib-dev` (SDK) | `cpplib-app-standalone` |
-| Windows ZIP | `cpplib-<ver>-windows-x64.zip`: app, `cpplib.dll`, MSVC runtime, SDK | `cpplib-standalone-<ver>-windows-x64.zip`: app |
+| Linux TGZ | `base-<ver>-linux-x86_64.tar.gz`: app, `libbase.so.0`, SDK | `base-standalone-<ver>-linux-x86_64.tar.gz`: app |
+| Linux DEB | `base-app` → depends on `libbase0`; `libbase-dev` (SDK) | `base-app-standalone` |
+| Windows ZIP | `base-<ver>-windows-x64.zip`: app, `base.dll`, MSVC runtime, SDK | `base-standalone-<ver>-windows-x64.zip`: app |
 | Windows MSI | one installer: Application, Runtime Libraries, Development Files | one installer: Application |
 
 The packages are assembled from three CPack components:
 
 | Component | Content | Present in |
 |---|---|---|
-| `app` | `cpplib_app`; app-local MSVC runtime DLLs (Windows, shared); License (standalone) | both modes |
-| `runtime` | `cpplib.dll` / `libcpplib.so.0*`, License | shared |
-| `dev` | headers, import library / `libcpplib.so` link, CMake package | shared |
+| `app` | `base_app`; app-local MSVC runtime DLLs (Windows, shared); License (standalone) | both modes |
+| `runtime` | `base.dll` / `libbase.so.0*`, License | shared |
+| `dev` | headers, import library / `libbase.so` link, CMake package | shared |
 
 How each generator uses them:
 - **TGZ and ZIP** contain all components of the build, ready to run.
@@ -272,19 +272,19 @@ How each generator uses them:
 - **DEB** packages install below `/usr`: the app goes to `/usr/bin`, the library to
   `/usr/lib`, the SDK to `/usr/include` and `/usr/lib/cmake`. This is the standard
   location for Debian packages and what most vendor packages use. The app is on
-  `PATH` right after installing, and `find_package(cpplib)` works without hints.
+  `PATH` right after installing, and `find_package(base)` works without hints.
   - A large self-contained product may prefer its own folder below `/opt`:
-    `cpack --preset package-gcc-release-shared -G DEB -D CPACK_PACKAGING_INSTALL_PREFIX=/opt/cpplib`
+    `cpack --preset package-gcc-release-shared -G DEB -D CPACK_PACKAGING_INSTALL_PREFIX=/opt/base`
     (build only the DEB this way: a `-D` on the command line applies to the archives too).
   - The cost of `/opt`: the app is no longer on `PATH` unless you add a link in
-    `/usr/bin`, and SDK users need `CMAKE_PREFIX_PATH=/opt/cpplib`.
+    `/usr/bin`, and SDK users need `CMAKE_PREFIX_PATH=/opt/base`.
 - **TGZ and ZIP** archives run from any folder they are extracted to (Linux RPATH
   `$ORIGIN/../lib`; on Windows the DLLs sit next to the exe).
 - **The MSI** lets the user pick the install folder.
 
 The shared and standalone MSIs share one upgrade GUID, so installing one replaces
 the other. The two app DEBs conflict with each other for the same reason: both
-install `cpplib_app`. Both share the upgrade code from design decision 10.
+install `base_app`. Both share the upgrade code from design decision 10.
 
 ### Signing
 
@@ -298,7 +298,7 @@ file was built by this repository's workflow from a specific commit
 verify a downloaded file:
 
 ```sh
-gh attestation verify cpplib-0.1.0-linux-x86_64.tar.gz --repo timow-gh/cpplib
+gh attestation verify base-0.1.0-linux-x86_64.tar.gz --repo timow-gh/base
 ```
 
 The `.sha256` files only detect corrupted downloads. An attestation also proves
@@ -349,19 +349,19 @@ decision 10), signing credentials are secret.
 
 ## Using the library from another project
 
-The shared packages contain the SDK (`libcpplib-dev`, or the `include`/`lib`
+The shared packages contain the SDK (`libbase-dev`, or the `include`/`lib`
 directories of the archives):
 
 ```cmake
-find_package(cpplib 0 CONFIG REQUIRED)   # -DCMAKE_PREFIX_PATH=<extracted archive> when not installed to /usr
-target_link_libraries(your_app PRIVATE cpplib::cpplib)
+find_package(base 0 CONFIG REQUIRED)   # -DCMAKE_PREFIX_PATH=<extracted archive> when not installed to /usr
+target_link_libraries(your_app PRIVATE base::base)
 ```
 
 No vcpkg and no fmt are needed on the consumer side. To ship such an application,
-install the cpplib runtime next to it:
+install the base runtime next to it:
 
 ```cmake
-install(IMPORTED_RUNTIME_ARTIFACTS cpplib::cpplib RUNTIME DESTINATION bin LIBRARY DESTINATION lib)
+install(IMPORTED_RUNTIME_ARTIFACTS base::base RUNTIME DESTINATION bin LIBRARY DESTINATION lib)
 ```
 
 `test/test_install/consumer/` is a complete example.

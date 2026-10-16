@@ -1,7 +1,7 @@
 IncludeCategories:
   - Regex: '^".*"'
     Priority: 1
-  - Regex: '^<cpplib/.*>'
+  - Regex: '^<base/.*>'
     Priority: 2
   - Regex: '^<.*>'
     Priority: 3

@@ -16,4 +16,4 @@ set(PRODUCT_CONTACT "timow-gh <39085531+timow-gh@users.noreply.github.com>")
 # into a separate product that installs side by side with the old version instead
 # of upgrading it. The release workflow (.github/workflows/release.yml) compares it
 # with the last release and refuses to publish a release in which it changed.
-set(PRODUCT_WIX_UPGRADE_GUID "6E7C3F4B-9A21-4D8E-B5C6-2F0A1D3E4B7C")
+set(PRODUCT_WIX_UPGRADE_GUID "0D7497EA-BB6B-5DC8-88D4-98CA433F43D7")

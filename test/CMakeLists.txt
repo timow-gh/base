@@ -7,7 +7,7 @@ if (CMAKE_CXX_FLAGS MATCHES "--coverage")
 else ()
     set(_test_install_default ON)
 endif ()
-option(${PROJECT_NAME}_TEST_INSTALL "Test consuming the installed cpplib package" ${_test_install_default})
+option(${PROJECT_NAME}_TEST_INSTALL "Test consuming the installed base package" ${_test_install_default})
 
 if (${PROJECT_NAME}_TEST_INSTALL AND ${PROJECT_NAME}_INSTALL AND BUILD_SHARED_LIBS)
     add_subdirectory(test_install)

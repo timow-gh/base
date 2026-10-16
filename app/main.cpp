@@ -1,8 +1,8 @@
-#include "cpplib/cpplib.hpp"
+#include "base/base.hpp"
 
 int main()
 {
     constexpr int theAnswer = 42;
-    cpplib::libraryFunction(theAnswer);
+    base::libraryFunction(theAnswer);
     return 0;
 }

@@ -20,10 +20,10 @@ if (NOT CPM_SOURCE_CACHE)
         Set the CPM_SOURCE_CACHE variable in CPMSourceVariable.cmake to keep your paths private.")
 endif ()
 
-project(cpplib
+project(base
         VERSION 0.1.0
-        DESCRIPTION "A C++ library and application template"
-        HOMEPAGE_URL "https://github.com/timow-gh/cpplib"
+        DESCRIPTION "Low-level foundation library: memory, platform and core utilities"
+        HOMEPAGE_URL "https://github.com/timow-gh/base"
         LANGUAGES CXX)
 
 # Every name of this project is derived from the project name: targets, CMake

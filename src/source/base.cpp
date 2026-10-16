@@ -1,11 +1,11 @@
-#include "cpplib/cpplib.hpp"
+#include "base/base.hpp"
 
 #include <fmt/core.h>
 
-namespace cpplib {
+namespace base {
 
 void libraryFunction(int value) {
     fmt::print("Hello from libraryFunction! The answer is {}\n", value);
 }
 
-} // namespace cpplib
+} // namespace base

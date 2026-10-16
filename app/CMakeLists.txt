@@ -1,11 +1,11 @@
-# The application is an ordinary target of this project: it links cpplib through
+# The application is an ordinary target of this project: it links base through
 # its alias target, and nothing has to be installed to build or run it.
 #
 # How it ships depends on the configure preset:
-#   *-standalone (BUILD_SHARED_LIBS=OFF): cpplib and fmt are linked statically,
+#   *-standalone (BUILD_SHARED_LIBS=OFF): base and fmt are linked statically,
 #       the package contains only the executable.
 #   *-shared     (BUILD_SHARED_LIBS=ON):  the package contains the executable,
-#       cpplib.dll / libcpplib.so (component "runtime", installed by
+#       base.dll / libbase.so (component "runtime", installed by
 #       src/CMakeLists.txt) and, on Windows, the app-local MSVC runtime DLLs.
 set(TARGET_NAME ${${PROJECT_NAME}_APP_TARGET})
 
@@ -25,7 +25,7 @@ endif ()
 
 # Running from the build tree needs no extra steps: on Windows project_preamble()
 # puts executables and DLLs into the same output directory, on Linux the build
-# RPATH points at libcpplib.so. The install RPATH ($ORIGIN/../lib) is set by
+# RPATH points at libbase.so. The install RPATH ($ORIGIN/../lib) is set by
 # project_preamble() as well.
 
 if (${PROJECT_NAME}_INSTALL)

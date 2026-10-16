@@ -1,6 +1,6 @@
-#include "cpplib/cpplib.hpp"
+#include "base/base.hpp"
 
 int main() {
-    cpplib::libraryFunction(42);
+    base::libraryFunction(42);
     return 0;
 }

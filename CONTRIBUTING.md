@@ -82,7 +82,7 @@ git push origin v0.1.0
 ```
 
 The release workflow verifies that the tag version matches
-`project(cpplib VERSION ...)` in `CMakeLists.txt` and the `version` in
+`project(base VERSION ...)` in `CMakeLists.txt` and the `version` in
 `vcpkg.json`, builds the shared and standalone packages, installs and runs them
 (`verify-packages`), generates the GitHub Release body with `git-cliff`, and
 uploads the package artifacts. It refuses to publish a release whose product

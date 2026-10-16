@@ -4,11 +4,11 @@ include_guard(GLOBAL)
 # configure preset sets (see "Shipping the application" in ReadMe.md):
 #
 #   shared     (*-shared presets)     components: app, runtime, dev
-#       app     - cpplib_app (+ app-local MSVC runtime DLLs on Windows)
-#       runtime - cpplib.dll / libcpplib.so.* and the License
+#       app     - base_app (+ app-local MSVC runtime DLLs on Windows)
+#       runtime - base.dll / libbase.so.* and the License
 #       dev     - headers, import library, CMake package files (the library SDK)
 #   standalone (*-standalone presets) components: app
-#       app     - the self-contained cpplib_app executable and the License
+#       app     - the self-contained base_app executable and the License
 #
 # Component layout per generator:
 #   TGZ / ZIP - one archive with every component (ready to run, and the SDK)
