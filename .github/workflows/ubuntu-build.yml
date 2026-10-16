@@ -17,23 +17,17 @@ jobs:
       matrix:
         compiler: [gcc, clang]
         build_type: [debug, release]
-        delivery_mode: [shared]
-        include:
-          # Test the standalone delivery mode only in release builds to minimize CI time
-          - compiler: gcc
-            build_type: release
-            delivery_mode: standalone
         exclude:
-          # For develop-* branches, run only gcc+debug+shared
+          # For develop-* branches, run only gcc+debug
           - compiler: ${{ startsWith(github.ref, 'refs/heads/develop-') && 'clang' || '_no_match_' }}
           - build_type: ${{ startsWith(github.ref, 'refs/heads/develop-') && 'release' || '_no_match_' }}
-    name: Build - ${{ matrix.compiler }} - ${{ matrix.build_type }} - ${{ matrix.delivery_mode }}
+    name: Build - ${{ matrix.compiler }} - ${{ matrix.build_type }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/ubuntu-build-steps
         with:
-          cmake_workflow: workflow-test-${{ matrix.compiler }}-${{ matrix.build_type }}${{ matrix.delivery_mode == 'standalone' && '-standalone' || '' }}
-  
+          cmake_workflow: workflow-test-${{ matrix.compiler }}-${{ matrix.build_type }}
+
   ubuntu-build-summary:
     runs-on: ubuntu-latest
     needs: ubuntu-build

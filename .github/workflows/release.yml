@@ -1,0 +1,182 @@
+name: Create Release
+
+# Trigger the workflow only when a tag starting with 'v' is pushed, e.g. v1.0.0.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate_version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      name: ${{ steps.version.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release version
+        id: version
+        shell: bash
+        run: |
+          project_name="$(grep -oP '^\s*project\(\s*\K[A-Za-z0-9_]+' CMakeLists.txt | head -n 1)"
+          cmake_version="$(
+            awk '
+              /^[[:space:]]*project[[:space:]]*\(/ { in_project = 1 }
+              in_project && /VERSION/ {
+                for (i = 1; i <= NF; i++) {
+                  if ($i == "VERSION") {
+                    print $(i + 1)
+                    exit
+                  }
+                }
+              }
+              in_project && /\)/ { in_project = 0 }
+            ' CMakeLists.txt
+          )"
+
+          if [[ -z "$cmake_version" ]]; then
+            echo "Could not read the CMake project version from CMakeLists.txt" >&2
+            exit 1
+          fi
+
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Release tags must use vMAJOR.MINOR.PATCH" >&2
+              exit 1
+            fi
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [[ "$tag_version" != "$cmake_version" ]]; then
+              echo "Tag version $tag_version does not match CMake version $cmake_version" >&2
+              exit 1
+            fi
+          fi
+
+          echo "version=$cmake_version" >> "$GITHUB_OUTPUT"
+          echo "name=$project_name" >> "$GITHUB_OUTPUT"
+
+  # Builds, tests and installs the SDK (headers, static libraries, CMake package).
+  build-sdk:
+    needs: validate_version
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+          - os: windows-latest
+            platform: windows-x64
+    runs-on: ${{ matrix.os }}
+    name: SDK - ${{ matrix.platform }}
+    env:
+      SDK_NAME: ${{ needs.validate_version.outputs.name }}-${{ needs.validate_version.outputs.version }}-${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build, test and install (Linux)
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/ubuntu-build-steps
+        with:
+          cmake_workflow: workflow-test-gcc-release
+
+      - name: Install SDK (Linux)
+        if: runner.os == 'Linux'
+        run: cmake --install out/build/conf-gcc-release --prefix "sdk/${SDK_NAME}" --component dev
+        shell: bash
+
+      # MSVC consumers cannot mix Debug and Release libraries (LNK2038), so the
+      # Windows SDK contains both configurations: base_cored.lib and base_core.lib.
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build, test and install (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          foreach ($config in 'debug', 'release') {
+            cmake --workflow --preset workflow-test-msvc-$config
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $buildConfig = (Get-Culture).TextInfo.ToTitleCase($config)
+            cmake --install out/build/conf-msvc-$config --config $buildConfig --prefix "sdk/$env:SDK_NAME" --component dev
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+        shell: pwsh
+
+      - name: Create SDK archive
+        working-directory: sdk
+        run: |
+          cmake -E tar cf "${SDK_NAME}.zip" --format=zip -- "${SDK_NAME}"
+          cmake -E sha256sum "${SDK_NAME}.zip" > "${SDK_NAME}.zip.sha256"
+        shell: bash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-${{ matrix.platform }}
+          path: |
+            sdk/*.zip
+            sdk/*.zip.sha256
+
+  create-release:
+    if: github.event_name == 'push'
+    needs:
+      - validate_version
+      - build-sdk
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The repository starts from the cpplib template. Its history must not end up
+      # in the release notes, so the first release starts after the rename commit.
+      - name: Select the commit range for the release notes
+        id: range
+        run: |
+          if git describe --tags --abbrev=0 --match 'v*' "${GITHUB_REF_NAME}^" > /dev/null 2>&1; then
+            echo "args=-vv --latest --strip header" >> "$GITHUB_OUTPUT"
+          else
+            start="$(git log --format=%H --grep='^chore: rename cpplib template to base$' -n 1)"
+            if [ -z "$start" ]; then
+              echo "Could not find the template rename commit" >&2
+              exit 1
+            fi
+            echo "args=-vv --strip header --tag ${GITHUB_REF_NAME} ${start}..${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+        shell: bash
+
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@v4
+        id: git_cliff
+        with:
+          config: cliff.toml
+          args: ${{ steps.range.outputs.args }}
+        env:
+          OUTPUT: RELEASE_NOTES.md
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download SDK archives
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ needs.validate_version.outputs.version }}
+          draft: false
+          prerelease: false
+          body: ${{ steps.git_cliff.outputs.content }}
+          files: |
+            sdk-linux-x86_64/*
+            sdk-windows-x64/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

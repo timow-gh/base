@@ -20,16 +20,18 @@ feat, fix, perf, docs, refactor, test, build, ci, chore, revert
 Recommended scopes for this repository:
 
 ```text
-api, core, app, cmake, package, ci, docs, tests
+core, platform, memory, cmake, ci, docs, tests
 ```
+
+Use the component name as the scope for changes to one component.
 
 Examples:
 
 ```text
-feat(api): add camera auto-fit option
-fix(opengl): restore transparency sorting
+feat(memory): add a pool allocator
+fix(platform): handle mmap failure on decommit
 ci(release): generate release notes from commits
-feat(api)!: rename public camera enum
+feat(memory)!: rename Arena::push_array to Arena::push_span
 ```
 
 Use `!` after the type or scope for breaking changes. You can also add a
@@ -82,13 +84,11 @@ git push origin v0.1.0
 ```
 
 The release workflow verifies that the tag version matches
-`project(base VERSION ...)` in `CMakeLists.txt` and the `version` in
-`vcpkg.json`, builds the shared and standalone packages, installs and runs them
-(`verify-packages`), generates the GitHub Release body with `git-cliff`, and
-uploads the package artifacts. It refuses to publish a release whose product
-identity (project name, MSI upgrade code) differs from the last release, see
-"Product identity and the MSI upgrade code" in the README.
+`project(base VERSION ...)` in `CMakeLists.txt`, builds and tests the SDK on
+Linux (Release) and Windows (Debug and Release), generates the GitHub Release
+body with `git-cliff`, and uploads the SDK archives with their checksums.
 
-Create `v0.1.0` as the baseline tag for the current history. After that,
-release notes are generated from Conventional Commits since the previous `v*`
-tag.
+Release notes are generated from Conventional Commits since the previous `v*`
+tag. The first release has no previous tag, so its notes start after the
+commit `chore: rename cpplib template to base`, which keeps the template's
+history out of them.

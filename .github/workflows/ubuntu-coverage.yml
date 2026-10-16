@@ -23,7 +23,7 @@ jobs:
           # errors). gcc-14 ships /usr/bin/gcov-14; install it explicitly, then pin it via
           # the GCOV env var that cmake/coverage.cmake honors. Export the *absolute path*:
           # coverage.cmake resolves an absolute GCOV with a plain set() (no find_program),
-          # which sidesteps CMake's cached find_program lookup under the vcpkg toolchain.
+          # which sidesteps CMake's cached find_program lookup.
           sudo apt-get update
           sudo apt-get install -y gcc-14
           GCOV_BIN="$(command -v gcov-14)"

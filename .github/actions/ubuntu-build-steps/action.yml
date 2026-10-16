@@ -20,10 +20,6 @@ runs:
       with:
         submodules: 'recursive'
 
-    - name: Set VCPKG_ROOT
-      run: echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> $GITHUB_ENV
-      shell: bash
-
     - name: Install build tools
       run: |
         # The runner's Google Chrome repository can occasionally be mid-sync.
@@ -50,7 +46,7 @@ runs:
         WORKFLOW_NAME="${{ inputs.cmake_workflow }}"
         # Extract compiler and build type from workflow name
         # workflow-test-gcc-release -> conf-gcc-release
-        # workflow-test-gcc-release-standalone -> conf-gcc-release-standalone
+        # workflow-test-gcc-debug-asan -> conf-gcc-debug-asan
         BASE_NAME="${WORKFLOW_NAME#workflow-test-}"
         echo "configure=conf-${BASE_NAME}" >> $GITHUB_OUTPUT
         echo "build=build-${BASE_NAME}" >> $GITHUB_OUTPUT
@@ -59,8 +55,8 @@ runs:
 
     - name: Configure
       run: |
-        # vcpkg may download source archives while configuring. GitHub occasionally returns
-        # transient 5xx/connection errors, so retry the complete configure step with backoff.
+        # CPM clones GoogleTest while configuring. GitHub occasionally returns transient
+        # 5xx/connection errors, so retry the complete configure step with backoff.
         for attempt in 1 2 3 4 5; do
           if cmake --preset ${{ steps.preset.outputs.configure }}; then
             break
