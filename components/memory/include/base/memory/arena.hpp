@@ -41,7 +41,7 @@ inline constexpr std::byte arenaFreedByte{0xDD};
 // that limit address space (ulimit -v, Valgrind), should state their size, see
 // arena_bytes_for(). 64 KiB commit steps balance the number of commit calls against
 // committed-but-unused memory.
-static_assert(sizeof(void*) == 8, "the default arena reservation assumes a 64-bit address space");
+static_assert(sizeof(void*) >= sizeof(std::uint64_t), "the default arena reservation assumes a 64-bit address space");
 inline constexpr std::size_t defaultArenaReserveSize = gib(64);
 inline constexpr std::size_t defaultArenaCommitSize = kib(64);
 
