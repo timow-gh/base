@@ -8,7 +8,9 @@
 #include <optional>
 #include <string_view>
 
-namespace base::memory::detail {
+namespace base::memory {
+
+namespace detail {
 
 namespace {
 
@@ -47,4 +49,21 @@ Arena& scratch_arena(std::initializer_list<const Arena*> conflicts) noexcept {
     scratch_failed("every scratch arena is in the conflicts");
 }
 
-} // namespace base::memory::detail
+} // namespace detail
+
+bool prepare_scratch_arenas(const ScratchConfig& config) noexcept {
+    for (std::optional<Arena>& slot : detail::scratch_arenas()) {
+        if (!slot.has_value()) {
+            slot = Arena::create(config.arena);
+            if (!slot.has_value()) {
+                return false;
+            }
+        }
+        if (!slot->commit_at_least(config.initialCommit, config.prefault)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace base::memory

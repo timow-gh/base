@@ -3,9 +3,12 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <limits>
 #include <thread>
 
 using base::memory::Arena;
+using base::memory::ArenaConfig;
+using base::memory::ScratchConfig;
 using base::memory::ScratchScope;
 
 namespace {
@@ -13,6 +16,13 @@ namespace {
 [[nodiscard]] const Arena* scratch_arena_of_new_scope() {
     const ScratchScope scratch;
     return &scratch.arena();
+}
+
+// Each thread has its own scratch arenas; a new thread starts without any.
+template <typename Function>
+void run_in_new_thread(Function function) {
+    std::thread thread(function);
+    thread.join();
 }
 
 } // namespace
@@ -89,4 +99,49 @@ TEST(ScratchScopeDeathTest, ConflictingWithEveryScratchArenaAborts) {
             const ScratchScope third({&first.arena(), &second.arena()});
         },
         "every scratch arena is in the conflicts");
+}
+
+TEST(ScratchScope, PrepareCreatesBothArenasWithTheConfigAndCommits) {
+    run_in_new_thread([] {
+        const ScratchConfig config{.arena = ArenaConfig{base::mib(256), base::kib(64)}, .initialCommit = base::mib(1)};
+        ASSERT_TRUE(base::memory::prepare_scratch_arenas(config));
+
+        const ScratchScope first;
+        const ScratchScope second({&first.arena()});
+        for (const Arena* arena : {&first.arena(), &second.arena()}) {
+            EXPECT_EQ(arena->reserved(), base::mib(256));
+            EXPECT_GE(arena->committed(), base::mib(1));
+            EXPECT_EQ(arena->used(), 0U);
+        }
+    });
+}
+
+TEST(ScratchScope, PrepareAfterFirstUseOnlyCommits) {
+    run_in_new_thread([] {
+        const Arena* existing = scratch_arena_of_new_scope();
+        const std::size_t reserved = existing->reserved();
+
+        const ScratchConfig config{.arena = ArenaConfig{base::mib(256), base::kib(64)}, .initialCommit = base::mib(1)};
+        ASSERT_TRUE(base::memory::prepare_scratch_arenas(config));
+        EXPECT_EQ(existing->reserved(), reserved);
+        EXPECT_GE(existing->committed(), base::mib(1));
+    });
+}
+
+TEST(ScratchScope, PrepareReportsAFailedReservation) {
+    run_in_new_thread([] {
+        const ScratchConfig config{.arena = ArenaConfig{std::numeric_limits<std::size_t>::max() / 2U, base::kib(64)}};
+        EXPECT_FALSE(base::memory::prepare_scratch_arenas(config));
+    });
+}
+
+TEST(ScratchScope, PrepareWithPrefaultCommitsAndKeepsTheArenasEmpty) {
+    run_in_new_thread([] {
+        const ScratchConfig config{.initialCommit = base::mib(1), .prefault = base::memory::Prefault::Yes};
+        ASSERT_TRUE(base::memory::prepare_scratch_arenas(config));
+
+        const ScratchScope scratch;
+        EXPECT_GE(scratch.arena().committed(), base::mib(1));
+        EXPECT_EQ(scratch.arena().used(), 0U);
+    });
 }

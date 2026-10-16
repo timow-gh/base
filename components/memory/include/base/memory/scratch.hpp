@@ -2,9 +2,36 @@
 
 #include "base/memory/arena.hpp"
 
+#include <cstddef>
 #include <initializer_list>
 
 namespace base::memory {
+
+/**
+ * \brief How prepare_scratch_arenas() sets up each of a thread's scratch arenas.
+ */
+struct ScratchConfig {
+    // Reservation and commit step of each scratch arena.
+    ArenaConfig arena;
+    // Bytes committed up front in each scratch arena, see Arena::commit_at_least().
+    std::size_t initialCommit = 0;
+    Prefault prefault = Prefault::No;
+};
+
+/**
+ * \brief Creates the calling thread's two scratch arenas with `config` and commits
+ * `config.initialCommit` bytes in each, so that ScratchScope never needs a commit call
+ * up to that size.
+ *
+ * Optional: without it, a thread's scratch arenas are created on first use with the
+ * default ArenaConfig. Call it at the start of each thread that wants it, before the
+ * thread's first ScratchScope; scratch arenas that already exist keep their
+ * reservation and only get the commit.
+ *
+ * \return false if a reservation or the commit fails. Unlike the creation on first
+ * use, which aborts, this lets the application report the failure.
+ */
+[[nodiscard]] bool prepare_scratch_arenas(const ScratchConfig& config = {}) noexcept;
 
 namespace detail {
 
@@ -47,8 +74,8 @@ namespace detail {
  * A function cannot tell whether an arena it is given is a scratch arena, and does not
  * need to: a conflict that is not a scratch arena changes nothing.
  *
- * Each scratch arena reserves the default ArenaConfig, created on first use by a
- * thread and released when the thread exits.
+ * A thread's scratch arenas are created on first use with the default ArenaConfig, or
+ * up front by prepare_scratch_arenas(), and released when the thread exits.
  */
 class ScratchScope {
 public:
