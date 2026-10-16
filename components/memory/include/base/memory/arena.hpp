@@ -280,6 +280,10 @@ private:
  *     ...
  * } // tokens are freed here
  * \endcode
+ *
+ * Memory that must outlive the scope, such as a result or a container created before
+ * the scope, must not come from the same arena while the scope is active: the rewind
+ * frees it. Put it in another arena, see ScratchScope.
  */
 class ArenaScope {
 public:
