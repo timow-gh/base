@@ -80,6 +80,22 @@ struct ArenaConfig {
 };
 
 /**
+ * \brief Whether Arena::commit_at_least() also writes to every page it commits, called
+ * prefaulting.
+ *
+ * Committing only promises the memory. The OS maps a zeroed physical page on the
+ * first write to it, a page fault of roughly a microsecond per 4 KiB page.
+ * Prefault::Yes takes all those faults now, so later allocations never pause for one.
+ * It saves no time overall, since the zeroing just happens earlier, and it puts memory
+ * into RAM that may never be used. Worth it for latency-critical code with a known
+ * peak, e.g. a frame loop or a benchmark.
+ */
+enum class Prefault : std::uint8_t {
+    No,  // Commit only; each page is mapped on its first write.
+    Yes, // Also write to every page now, so no page faults occur later.
+};
+
+/**
  * \brief A linear (bump) allocator over one contiguous range of reserved virtual memory.
  *
  * Allocation is a pointer bump plus, when the committed part is exhausted, one commit
@@ -173,6 +189,20 @@ public:
     [[nodiscard]] void* reallocate(void* memory, std::size_t oldSize, std::size_t newSize, std::size_t alignment) noexcept;
 
     /**
+     * \brief Commits the first `size` bytes of the arena now, so that allocations up to
+     * that size never need a commit call. Nothing is allocated; used() is unchanged.
+     *
+     * Meant for setup, when the peak usage is known, e.g. a tool that commits its
+     * permanent arena once at startup. One commit call, rounded up to the commit step;
+     * with Prefault::Yes also one write per page, O(size / page size).
+     *
+     * \param prefault Prefault::Yes also maps the pages into RAM now, see Prefault.
+     * \return false, leaving the arena unchanged, if `size` exceeds the reservation or
+     * the system cannot commit the memory.
+     */
+    [[nodiscard]] bool commit_at_least(std::size_t size, Prefault prefault = Prefault::No) noexcept;
+
+    /**
      * \brief Constructs a T from `args`. It is never destroyed.
      * \return nullptr when the arena is exhausted.
      */
@@ -255,6 +285,7 @@ private:
     // Moves the position to `end` and hands out [begin, end); [m_offset, begin) is padding.
     [[nodiscard]] bool hand_out(std::size_t begin, std::size_t end, Fill fill) noexcept;
     [[nodiscard]] bool commit_up_to(std::size_t end) noexcept;
+    void touch_pages(std::size_t begin, std::size_t end) noexcept;
     void release_reservation() noexcept;
 
     std::byte* m_base = nullptr;

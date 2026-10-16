@@ -208,6 +208,38 @@ bool Arena::commit_up_to(std::size_t end) noexcept {
     return true;
 }
 
+bool Arena::commit_at_least(std::size_t size, Prefault prefault) noexcept {
+    if (size > m_reserved) {
+        return false;
+    }
+    if (size > m_committed && !commit_up_to(size)) {
+        return false;
+    }
+    if (prefault == Prefault::Yes) {
+        // Pages below the high water mark were handed out before, so they are mapped
+        // already, and in debug builds their freed part must keep arenaFreedByte.
+        const std::size_t pageSize = platform::page_size();
+        touch_pages(align_up(m_highWater, pageSize), std::min(align_up(size, pageSize), m_committed));
+    }
+    return true;
+}
+
+void Arena::touch_pages(std::size_t begin, std::size_t end) noexcept {
+    if (begin >= end) {
+        return;
+    }
+    // Writes zero because bytes above the high water mark must stay zero, which
+    // allocate_zeroed() relies on. A read would not do: Linux maps a shared zero page
+    // for it and faults again on the first write.
+    BASE_ASAN_UNPOISON(m_base + begin, end - begin);
+    const std::size_t pageSize = platform::page_size();
+    for (std::size_t offset = begin; offset < end; offset += pageSize) {
+        volatile std::byte* page = m_base + offset;
+        *page = std::byte{0};
+    }
+    BASE_ASAN_POISON(m_base + begin, end - begin);
+}
+
 void Arena::rewind_to(Marker marker) noexcept {
     BASE_ASSERT_MSG(marker.offset <= m_offset, "rewind to a marker past the current position");
     if (marker.offset >= m_offset) {

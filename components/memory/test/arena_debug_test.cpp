@@ -173,6 +173,14 @@ TEST_F(ArenaDebugTest, TryGrowOverMemoryWrittenAfterResetIsReported) {
     EXPECT_NE(recorded().messages.front().find("offset 100"), std::string::npos) << recorded().messages.front();
 }
 
+TEST_F(ArenaDebugTest, PrefaultingKeepsTheFreedPatternBelowTheHighWaterMark) {
+    ASSERT_NE(arena().allocate(128, 8), nullptr);
+    arena().reset();
+    ASSERT_TRUE(arena().commit_at_least(base::mib(1), base::memory::Prefault::Yes));
+    ASSERT_NE(arena().allocate(256, 8), nullptr);
+    EXPECT_TRUE(recorded().messages.empty());
+}
+
 #if BASE_HAS_ASAN
 TEST(ArenaAsanDeathTest, ReadingFreedMemoryIsReportedByAsan) {
     std::optional<Arena> arena = Arena::create({base::mib(1), base::kib(64)});

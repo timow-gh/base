@@ -399,3 +399,44 @@ TEST(Arena, ReallocateReturnsNullptrWhenExhaustedAndKeepsTheOldBlock) {
     EXPECT_EQ(arena.reallocate(block, 16, granularity, 8), nullptr);
     EXPECT_EQ(block[15], std::byte{0x66});
 }
+
+TEST(Arena, CommitAtLeastCommitsWithoutAllocating) {
+    Arena arena = make_arena({base::mib(16), base::kib(64)});
+    ASSERT_TRUE(arena.commit_at_least(base::mib(1)));
+    EXPECT_GE(arena.committed(), base::mib(1));
+    EXPECT_EQ(arena.used(), 0U);
+
+    const std::size_t committed = arena.committed();
+    ASSERT_NE(arena.allocate(base::mib(1), 8), nullptr);
+    EXPECT_EQ(arena.committed(), committed);
+}
+
+TEST(Arena, CommitAtLeastBelowTheCommittedSizeChangesNothing) {
+    Arena arena = make_arena({base::mib(16), base::kib(64)});
+    ASSERT_TRUE(arena.commit_at_least(base::mib(1)));
+    const std::size_t committed = arena.committed();
+
+    EXPECT_TRUE(arena.commit_at_least(base::kib(4)));
+    EXPECT_TRUE(arena.commit_at_least(0));
+    EXPECT_EQ(arena.committed(), committed);
+}
+
+TEST(Arena, CommitAtLeastBeyondTheReservationFails) {
+    const std::size_t granularity = base::platform::allocation_granularity();
+    Arena arena = make_arena({granularity, granularity});
+    EXPECT_FALSE(arena.commit_at_least(granularity + 1U));
+    EXPECT_EQ(arena.committed(), 0U);
+    EXPECT_TRUE(arena.commit_at_least(granularity));
+}
+
+TEST(Arena, PrefaultedMemoryIsStillZero) {
+    Arena arena = make_arena({base::mib(16), base::kib(64)});
+    ASSERT_TRUE(arena.commit_at_least(base::mib(1), base::memory::Prefault::Yes));
+    EXPECT_EQ(arena.used(), 0U);
+
+    // Release builds skip zeroing above the high water mark, so this checks that
+    // prefaulting wrote zeros.
+    const auto* memory = static_cast<const std::byte*>(arena.allocate_zeroed(base::mib(1), 8));
+    ASSERT_NE(memory, nullptr);
+    EXPECT_TRUE(std::all_of(memory, memory + base::mib(1), [](std::byte value) { return value == std::byte{0}; }));
+}
