@@ -1,0 +1,18 @@
+@PACKAGE_INIT@
+
+# Configure imported target configuration mapping for Windows multi-config builds
+# Allows Release and RelWithDebInfo to be used instead of Debug as fallback
+# See https://gitlab.kitware.com/cmake/cmake/issues/20319
+set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel RelWithDebInfo Release Debug "")
+set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel Debug "")
+set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel Debug "")
+
+# No find_dependency() calls: cpplib links its third-party dependencies statically
+# and build-only ($<BUILD_LOCAL_INTERFACE:...>), so the installed shared library
+# is self-contained and consumers need nothing but this package.
+
+# Include the targets file
+include("${CMAKE_CURRENT_LIST_DIR}/@project_name@Targets.cmake")
+
+# Verify that all required components have been found
+check_required_components(@project_name@)
