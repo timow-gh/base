@@ -11,10 +11,12 @@ namespace base::memory {
 
 /**
  * \brief STL allocator that takes its memory from an Arena, so that standard containers
- * can live in one, see arena_containers.hpp for aliases:
+ * can live in one:
  * \code
- * std::vector<int, ArenaAllocator<int>> values(arena); // == ArenaVector<int> values(arena);
+ * std::vector<int, ArenaAllocator<int>> values(arena);
  * \endcode
+ * The containers component has aliases for the common ones, e.g.
+ * base::containers::ArenaVector.
  *
  * deallocate() does nothing; the memory comes back when the arena is rewound past it.
  * A growing std::vector therefore leaves each outgrown buffer behind, which its
@@ -39,7 +41,7 @@ public:
     using is_always_equal = std::false_type;
 
     // Implicit, deviating from C.46, so that containers are constructed from the arena
-    // itself: `ArenaVector<int> values(arena);`.
+    // itself: `std::vector<int, ArenaAllocator<int>> values(arena);`.
     ArenaAllocator(Arena& arena) noexcept
         : m_arena(&arena) {}
 

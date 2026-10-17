@@ -89,6 +89,9 @@ base_declare_component(core)
 base_declare_component(profile DEPENDS core)
 base_declare_component(platform DEPENDS core)
 base_declare_component(memory DEPENDS core platform)
+# memory must never depend on containers: allocators keep their own bookkeeping in
+# memory::detail, so the containers can be built on top of them.
+base_declare_component(containers DEPENDS core memory)
 
 # Consumers select what they need, e.g. -Dbase_COMPONENTS=memory or
 # CPMAddPackage(... OPTIONS "base_COMPONENTS memory"); dependencies are added

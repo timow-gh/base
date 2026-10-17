@@ -6,7 +6,6 @@ base_add_component(
         HEADERS
         include/base/memory/arena.hpp
         include/base/memory/arena_allocator.hpp
-        include/base/memory/arena_containers.hpp
         include/base/memory/scratch.hpp)
 
 if (${PROJECT_NAME}_TESTS)
