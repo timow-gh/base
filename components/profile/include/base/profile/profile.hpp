@@ -1,9 +1,9 @@
 #pragma once
 
 #include "base/core/config.hpp"
+#include "base/core/types.hpp"
 #include "base/profile/cpu_timer.hpp"
 
-#include <cstdint>
 #include <cstdio>
 #include <optional>
 #include <string_view>
@@ -72,10 +72,10 @@ struct Anchor {
     ~Anchor() = default;
 
     const char* name;
-    std::uint64_t hitCount = 0;
-    std::uint64_t exclusiveTicks = 0;
-    std::uint64_t inclusiveTicks = 0;
-    std::uint64_t processedBytes = 0;
+    u64 hitCount = 0;
+    u64 exclusiveTicks = 0;
+    u64 inclusiveTicks = 0;
+    u64 processedBytes = 0;
     Anchor* next = nullptr;
 };
 
@@ -95,7 +95,7 @@ static_assert(std::is_trivially_destructible_v<Anchor>);
  */
 class Block {
 public:
-    explicit Block(Anchor& anchor, std::uint64_t processedBytes = 0) noexcept
+    explicit Block(Anchor& anchor, u64 processedBytes = 0) noexcept
         : m_anchor(&anchor)
         , m_parent(std::exchange(detail::currentAnchor, &anchor))
         , m_oldInclusiveTicks(anchor.inclusiveTicks)
@@ -108,7 +108,7 @@ public:
     Block& operator=(Block&&) = delete;
 
     ~Block() {
-        const std::uint64_t elapsedTicks = read_cpu_timer() - m_startTicks;
+        const u64 elapsedTicks = read_cpu_timer() - m_startTicks;
         ++m_anchor->hitCount;
         m_anchor->processedBytes += m_processedBytes;
         m_anchor->exclusiveTicks += elapsedTicks;
@@ -126,9 +126,9 @@ public:
 private:
     Anchor* m_anchor;
     Anchor* m_parent;
-    std::uint64_t m_oldInclusiveTicks;
-    std::uint64_t m_processedBytes;
-    std::uint64_t m_startTicks;
+    u64 m_oldInclusiveTicks;
+    u64 m_processedBytes;
+    u64 m_startTicks;
 };
 
 /**
@@ -136,10 +136,10 @@ private:
  */
 struct ZoneStats {
     std::string_view name;
-    std::uint64_t hitCount = 0;
-    std::uint64_t exclusiveTicks = 0;
-    std::uint64_t inclusiveTicks = 0;
-    std::uint64_t processedBytes = 0;
+    u64 hitCount = 0;
+    u64 exclusiveTicks = 0;
+    u64 inclusiveTicks = 0;
+    u64 processedBytes = 0;
 };
 
 /**
@@ -189,7 +189,7 @@ void print_report(std::FILE* stream);
 #define BASE_PROFILE_BANDWIDTH(name, bytes)                                                                            \
     static ::base::profile::Anchor BASE_PROFILE_CONCAT(baseProfileAnchor, __LINE__){name};                             \
     const ::base::profile::Block BASE_PROFILE_CONCAT(baseProfileBlock, __LINE__) {                                     \
-        BASE_PROFILE_CONCAT(baseProfileAnchor, __LINE__), static_cast<std::uint64_t>(bytes)                            \
+        BASE_PROFILE_CONCAT(baseProfileAnchor, __LINE__), static_cast<::base::u64>(bytes)                              \
     }
 
 /**

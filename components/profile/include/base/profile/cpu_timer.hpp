@@ -1,8 +1,7 @@
 #pragma once
 
 #include "base/core/config.hpp"
-
-#include <cstdint>
+#include "base/core/types.hpp"
 
 #if BASE_COMPILER_MSVC
 #include <intrin.h>
@@ -25,13 +24,13 @@ namespace base::profile {
  * The read is not serializing: the CPU may reorder it with neighboring instructions
  * by a few cycles, which is noise at the scale of a profiling zone.
  */
-[[nodiscard]] inline std::uint64_t read_cpu_timer() noexcept {
+[[nodiscard]] inline u64 read_cpu_timer() noexcept {
 #if BASE_ARCH_X64
     return __rdtsc();
 #elif BASE_COMPILER_MSVC
-    return static_cast<std::uint64_t>(_ReadStatusReg(ARM64_CNTVCT));
+    return static_cast<u64>(_ReadStatusReg(ARM64_CNTVCT));
 #else
-    std::uint64_t ticks = 0;
+    u64 ticks = 0;
     asm volatile("mrs %0, cntvct_el0" : "=r"(ticks));
     return ticks;
 #endif

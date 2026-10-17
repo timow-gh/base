@@ -1,11 +1,11 @@
 #include "base/profile/profile.hpp"
 
 #include "base/core/assert.hpp"
+#include "base/core/types.hpp"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cstddef>
 #include <filesystem>
 #include <format>
 #include <functional>
@@ -38,7 +38,7 @@ struct Session {
     // Set by report() and print_report(): a program that reports on its own does not
     // get a second report at exit.
     bool reported = false;
-    std::uint64_t startTicks;
+    u64 startTicks;
     SteadyClock::time_point startTime;
 };
 
@@ -52,44 +52,42 @@ Session& session() noexcept {
 }
 
 // The report sorts on the stack; zones beyond this many are summarized in one line.
-constexpr std::size_t maxReportedZones = 512;
+constexpr usize maxReportedZones = 512;
 // Wider names are not truncated, they only shift their own row.
-constexpr std::size_t maxNameColumnWidth = 40;
-constexpr double millisecondsPerSecond = 1000.0;
-constexpr double bytesPerGigabyte = 1e9;
-constexpr double hertzPerGigahertz = 1e9;
-constexpr double percent = 100.0;
+constexpr usize maxNameColumnWidth = 40;
+constexpr f64 millisecondsPerSecond = 1000.0;
+constexpr f64 bytesPerGigabyte = 1e9;
+constexpr f64 hertzPerGigahertz = 1e9;
+constexpr f64 percent = 100.0;
 
 struct Timing {
-    std::uint64_t totalTicks = 0;
-    double ticksPerSecond = 0.0;
+    u64 totalTicks = 0;
+    f64 ticksPerSecond = 0.0;
 };
 
-[[nodiscard]] double to_milliseconds(std::uint64_t ticks, const Timing& timing) noexcept {
-    return timing.ticksPerSecond > 0.0 ? static_cast<double>(ticks) / timing.ticksPerSecond * millisecondsPerSecond
-                                       : 0.0;
+[[nodiscard]] f64 to_milliseconds(u64 ticks, const Timing& timing) noexcept {
+    return timing.ticksPerSecond > 0.0 ? static_cast<f64>(ticks) / timing.ticksPerSecond * millisecondsPerSecond : 0.0;
 }
 
-[[nodiscard]] double share_of_total(std::uint64_t ticks, const Timing& timing) noexcept {
-    return timing.totalTicks > 0U ? static_cast<double>(ticks) / static_cast<double>(timing.totalTicks) * percent
-                                  : 0.0;
+[[nodiscard]] f64 share_of_total(u64 ticks, const Timing& timing) noexcept {
+    return timing.totalTicks > 0U ? static_cast<f64>(ticks) / static_cast<f64>(timing.totalTicks) * percent : 0.0;
 }
 
-[[nodiscard]] double gigabytes_per_second(const Anchor& anchor, const Timing& timing) noexcept {
-    const double seconds =
-        timing.ticksPerSecond > 0.0 ? static_cast<double>(anchor.inclusiveTicks) / timing.ticksPerSecond : 0.0;
-    return seconds > 0.0 ? static_cast<double>(anchor.processedBytes) / seconds / bytesPerGigabyte : 0.0;
+[[nodiscard]] f64 gigabytes_per_second(const Anchor& anchor, const Timing& timing) noexcept {
+    const f64 seconds =
+        timing.ticksPerSecond > 0.0 ? static_cast<f64>(anchor.inclusiveTicks) / timing.ticksPerSecond : 0.0;
+    return seconds > 0.0 ? static_cast<f64>(anchor.processedBytes) / seconds / bytesPerGigabyte : 0.0;
 }
 
-[[nodiscard]] std::uint64_t exclusive_ticks_of(const Anchor* anchor) noexcept {
+[[nodiscard]] u64 exclusive_ticks_of(const Anchor* anchor) noexcept {
     return anchor->exclusiveTicks;
 }
 
 // The zones with hits, at most maxReportedZones of them, keeping the most expensive.
 struct ReportedZones {
     std::array<const Anchor*, maxReportedZones> anchors{};
-    std::size_t count = 0;
-    std::size_t omittedCount = 0;
+    usize count = 0;
+    usize omittedCount = 0;
 };
 
 [[nodiscard]] ReportedZones collect_zones(const Anchor* firstAnchor) noexcept {
@@ -112,15 +110,15 @@ struct ReportedZones {
     return zones;
 }
 
-[[nodiscard]] std::size_t name_column_width(const ReportedZones& zones) noexcept {
-    std::size_t width = std::string_view("zone").size();
-    for (std::size_t i = 0; i < zones.count; ++i) {
+[[nodiscard]] usize name_column_width(const ReportedZones& zones) noexcept {
+    usize width = std::string_view("zone").size();
+    for (usize i = 0; i < zones.count; ++i) {
         width = std::max(width, std::min(std::string_view(zones.anchors[i]->name).size(), maxNameColumnWidth));
     }
     return width;
 }
 
-void print_zone(std::FILE* stream, const Anchor& anchor, std::size_t nameWidth, const Timing& timing) {
+void print_zone(std::FILE* stream, const Anchor& anchor, usize nameWidth, const Timing& timing) {
     std::print(stream,
                "{:<{}}  {:>10}  {:>10.2f} ms {:>5.1f}%  {:>10.2f} ms {:>5.1f}%",
                anchor.name,
@@ -146,16 +144,16 @@ void print_zone(std::FILE* stream, const Anchor& anchor, std::size_t nameWidth, 
 }
 
 void write_report(std::FILE* stream, const Session& current) {
-    const std::uint64_t endTicks = read_cpu_timer();
+    const u64 endTicks = read_cpu_timer();
     const SteadyClock::time_point endTime = SteadyClock::now();
 
-    const double seconds = std::chrono::duration<double>(endTime - current.startTime).count();
+    const f64 seconds = std::chrono::duration<f64>(endTime - current.startTime).count();
     Timing timing;
     timing.totalTicks = endTicks - current.startTicks;
-    timing.ticksPerSecond = seconds > 0.0 ? static_cast<double>(timing.totalTicks) / seconds : 0.0;
+    timing.ticksPerSecond = seconds > 0.0 ? static_cast<f64>(timing.totalTicks) / seconds : 0.0;
 
     const ReportedZones zones = collect_zones(current.firstAnchor);
-    const std::size_t nameWidth = name_column_width(zones);
+    const usize nameWidth = name_column_width(zones);
 
     std::println(stream,
                  "Total: {:.2f} ms (CPU timer {:.2f} GHz)",
@@ -169,7 +167,7 @@ void write_report(std::FILE* stream, const Session& current) {
                  "exclusive",
                  "inclusive",
                  "bandwidth");
-    for (std::size_t i = 0; i < zones.count; ++i) {
+    for (usize i = 0; i < zones.count; ++i) {
         print_zone(stream, *zones.anchors[i], nameWidth, timing);
     }
     if (zones.omittedCount > 0U) {

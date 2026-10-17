@@ -3,6 +3,7 @@
 #undef BASE_ENABLE_PROFILING
 #define BASE_ENABLE_PROFILING 1
 
+#include "base/core/types.hpp"
 #include "base/profile/profile.hpp"
 
 #include "exit_test_support.hpp"
@@ -10,8 +11,6 @@
 #include <gtest/gtest.h>
 
 #include <array>
-#include <cstddef>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -19,13 +18,14 @@
 #include <utility>
 
 using base::profile::ZoneStats;
+using namespace base::types;
 
 namespace {
 
 // Gives zones measurable work without depending on how long it takes.
 void spin() {
-    volatile std::uint64_t sink = 0;
-    for (std::uint64_t i = 0; i < 1000U; ++i) {
+    volatile u64 sink = 0;
+    for (u64 i = 0; i < 1000U; ++i) {
         sink = sink + i;
     }
 }
@@ -35,7 +35,7 @@ void hit_zone() {
     spin();
 }
 
-void process_bytes(std::uint64_t byteCount) {
+void process_bytes(u64 byteCount) {
     BASE_PROFILE_BANDWIDTH("test.bandwidth", byteCount);
     spin();
 }
@@ -47,12 +47,12 @@ int recurse(int depth) {
 }
 
 // Each instantiation is a zone of its own, see Anchor.
-template <std::size_t Index>
+template <usize Index>
 void cheap_zone() {
     BASE_PROFILE_SCOPE("test.cheap");
 }
 
-template <std::size_t... Indices>
+template <usize... Indices>
 void enter_cheap_zones(std::index_sequence<Indices...> /*indices*/) {
     (cheap_zone<Indices>(), ...);
 }
