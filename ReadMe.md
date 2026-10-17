@@ -7,12 +7,13 @@ base is a low-level foundation library for C++23: memory management, platform
 abstractions and core utilities. It is split into components, and a project builds
 and links only the components it uses.
 
-The components are static libraries with no third-party dependencies.
+The components are static libraries, or interface libraries when they are
+header-only, with no third-party dependencies.
 
 ## Components
 
 ```
-core  <──  platform  <──  memory
+core  <──  platform  <──  memory  <──  containers
   ^
   └──  profile
 ```
@@ -22,6 +23,7 @@ core  <──  platform  <──  memory
 | `core` | `base::core` | Platform/compiler detection (`config.hpp`), assertions `BASE_ASSERT(cond)` / `BASE_ASSERT_MSG(cond, msg)` with a replaceable handler and no cost when disabled (`assert.hpp`), alignment helpers (`alignment.hpp`), byte units (`units.hpp`), ASan poisoning macros (`asan.hpp`) |
 | `platform` | `base::platform` | Virtual memory: reserve, commit, decommit and release address space (Win32 and POSIX) |
 | `memory` | `base::memory` | `Arena`: a linear allocator over reserved virtual memory |
+| `containers` | `base::containers` | Header-only. STL containers that allocate from an `Arena`: `ArenaVector`, `ArenaString`, `ArenaMap`, `ArenaSet`, `ArenaUnorderedMap`, `ArenaUnorderedSet` |
 | `profile` | `base::profile` | Profiling zones `BASE_PROFILE_SCOPE` / `BASE_PROFILE_FUNCTION` / `BASE_PROFILE_BANDWIDTH`, timed with the CPU timestamp counter and compiled out unless profiling is enabled |
 
 Linking a component links its dependencies too. `base::base` links every
@@ -208,7 +210,7 @@ The tests:
 | Test | What it checks |
 |---|---|
 | `base.<component>` | The unit tests of each component (GoogleTest), in `components/<name>/test/` |
-| `TestbaseInstall` | Installs the SDK and builds `test/test_install/consumer/` with `find_package(base COMPONENTS memory)` |
+| `TestbaseInstall` | Installs the SDK and builds `test/test_install/consumer/` with `find_package(base COMPONENTS containers)` |
 | `TestbaseSubdirectory*` | Builds `test/test_subdirectory/consumer/` with `add_subdirectory()` and `base_COMPONENTS=core`, and fails if other components are created |
 
 Options (the defaults in brackets apply when base is the top-level project; as a subproject everything except PIC is OFF):
@@ -230,7 +232,10 @@ Options (the defaults in brackets apply when base is the top-level project; as a
    `base_declare_component(strings DEPENDS core memory)`.
 2. Create `components/strings/CMakeLists.txt` with one `base_add_component()` call
    (sources, headers) and one `base_add_component_test()` call. See
-   `components/memory/CMakeLists.txt`.
+   `components/memory/CMakeLists.txt`. Without `SOURCES` the component is
+   header-only and becomes an interface library; each header is then compiled
+   on its own to get warnings and static analysis without passing them on to
+   consumers.
 3. Put public headers in `components/strings/include/base/strings/` and use
    `namespace base::strings`.
 
@@ -242,7 +247,8 @@ the installed package.
 
 - **Static only.** The components are small and low-level, and allocators should
   not cross DLL boundaries. Because they are compiled as PIC, consumers can
-  still link them into their own shared libraries.
+  still link them into their own shared libraries. Header-only components
+  have nothing to compile and are interface libraries.
 - **No third-party dependencies.** Not even through the arena: assertion messages
   are formatted on the stack.
 - **The MSVC runtime is the consumer's choice.** base doesn't set
