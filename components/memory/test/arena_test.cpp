@@ -270,12 +270,60 @@ TEST(Arena, MoveTransfersOwnership) {
     EXPECT_EQ(source.allocate(1, 1), nullptr);
     EXPECT_EQ(*value, 42);
     EXPECT_EQ(moved.used(), sizeof(int));
+    EXPECT_EQ(moved.allocation_count(), 1U);
 
     Arena assigned = make_arena();
     assigned = std::move(moved);
     EXPECT_EQ(*value, 42);
     EXPECT_EQ(assigned.used(), sizeof(int));
+    EXPECT_EQ(assigned.allocation_count(), 1U);
     ASSERT_NE(assigned.push<int>(7), nullptr);
+}
+
+TEST(Arena, AllocationCountCountsBlocksButNotGrowthInPlace) {
+    Arena arena = make_arena();
+    void* block = arena.allocate(16, 8);
+    ASSERT_NE(block, nullptr);
+    ASSERT_TRUE(arena.try_grow(block, 16, 32));
+    ASSERT_EQ(arena.reallocate(block, 32, 64, 8), block);
+    ASSERT_NE(arena.push<int>(1), nullptr);
+    ASSERT_EQ(arena.push_array<int>(4).size(), 4U);
+    ASSERT_NE(arena.allocate_zeroed(8, 8), nullptr);
+    EXPECT_EQ(arena.allocation_count(), 4U);
+
+    arena.reset();
+    EXPECT_EQ(arena.allocation_count(), 4U);
+}
+
+TEST(Arena, PeakUsedKeepsTheHighestPositionAcrossRewinds) {
+    Arena arena = make_arena();
+    ASSERT_NE(arena.allocate(100, 1), nullptr);
+    arena.reset();
+    ASSERT_NE(arena.allocate(10, 1), nullptr);
+    EXPECT_EQ(arena.used(), 10U);
+    EXPECT_EQ(arena.peak_used(), 100U);
+}
+
+TEST(Arena, ArenaTotalsFollowReserveCommitAndRelease) {
+    const base::memory::ArenaTotals before = base::memory::arena_totals();
+    {
+        Arena arena = make_arena();
+        base::memory::ArenaTotals totals = base::memory::arena_totals();
+        EXPECT_EQ(totals.reservedBytes - before.reservedBytes, arena.reserved());
+        EXPECT_EQ(totals.committedBytes, before.committedBytes);
+
+        ASSERT_NE(arena.allocate(1, 1), nullptr);
+        totals = base::memory::arena_totals();
+        EXPECT_EQ(totals.committedBytes - before.committedBytes, arena.committed());
+        EXPECT_GE(totals.peakCommittedBytes, totals.committedBytes);
+
+        // Moving hands the memory over; the totals stay.
+        const Arena moved(std::move(arena));
+        EXPECT_EQ(base::memory::arena_totals().committedBytes, totals.committedBytes);
+    }
+    const base::memory::ArenaTotals after = base::memory::arena_totals();
+    EXPECT_EQ(after.reservedBytes, before.reservedBytes);
+    EXPECT_EQ(after.committedBytes, before.committedBytes);
 }
 
 TEST(Arena, ZeroSizedAllocationReturnsAlignedPointer) {

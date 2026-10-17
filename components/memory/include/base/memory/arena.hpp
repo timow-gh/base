@@ -74,6 +74,29 @@ template <typename T>
 }
 
 /**
+ * \brief The memory of all arenas of the process together, see arena_totals().
+ */
+struct ArenaTotals {
+    // Address space of the arenas that exist now.
+    u64 reservedBytes = 0;
+    // Memory backed by RAM or the page file, the arenas' share of the process's memory use.
+    u64 committedBytes = 0;
+    // The highest committedBytes since the program started.
+    u64 peakCommittedBytes = 0;
+};
+
+/**
+ * \brief The memory that all arenas of the process reserve and commit, including the
+ * scratch arenas of every thread. Next to base::profile::heap_stats() it completes the
+ * picture of the process's memory use.
+ *
+ * Updated only when an arena is created, commits and is destroyed, never per
+ * allocation, so unlike heap tracking it is on in every build. Thread-safe; the fields
+ * are read one after another.
+ */
+[[nodiscard]] ArenaTotals arena_totals() noexcept;
+
+/**
  * \brief Sizes of an arena. Both are rounded up to what the OS requires.
  */
 struct ArenaConfig {
@@ -273,6 +296,20 @@ public:
     [[nodiscard]] usize reserved() const noexcept { return m_reserved; }
 
     /**
+     * \brief The highest used() since the arena was created, not lowered by rewinding.
+     * Sizes the arena for its workload, e.g. the reservation or
+     * ScratchConfig::initialCommit.
+     */
+    [[nodiscard]] usize peak_used() const noexcept { return m_highWater; }
+
+    /**
+     * \brief Blocks handed out since the arena was created, by allocate(),
+     * allocate_zeroed(), push(), push_array() and a reallocate() that copies. Growing in
+     * place is not counted. Not lowered by rewinding.
+     */
+    [[nodiscard]] u64 allocation_count() const noexcept { return m_allocationCount; }
+
+    /**
      * \brief True if the library was built with the debug fill patterns and the
      * use-after-free check (BASE_ARENA_DEBUG, on by default when assertions are on).
      */
@@ -305,6 +342,7 @@ private:
     usize m_highWater = 0;
     // Offset of the allocation that try_grow() may extend, or noLastAllocation.
     usize m_lastAllocation = noLastAllocation;
+    u64 m_allocationCount = 0;
 };
 
 /**

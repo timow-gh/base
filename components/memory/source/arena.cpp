@@ -3,11 +3,13 @@
 #include "base/core/alignment.hpp"
 #include "base/core/asan.hpp"
 #include "base/core/assert.hpp"
+#include "base/core/atomic.hpp"
 #include "base/core/types.hpp"
 #include "base/platform/virtual_memory.hpp"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstring>
 #include <format>
 #include <string_view>
@@ -34,6 +36,15 @@ std::optional<usize> find_modified_freed_byte(std::span<const std::byte> bytes) 
 
 namespace {
 
+// Mutable globals, against Core Guidelines I.2: arenas of every thread report to them,
+// including the scratch arenas that thread exits destroy after main() returned, so they
+// must be constant-initialized and live for the whole program.
+// NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables)
+constinit std::atomic<u64> totalReservedBytes{0};
+constinit std::atomic<u64> totalCommittedBytes{0};
+constinit std::atomic<u64> peakCommittedBytes{0};
+// NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables)
+
 [[nodiscard]] usize round_up_to_multiple(usize value, usize multiple) noexcept {
     return ((value + multiple - 1U) / multiple) * multiple;
 }
@@ -52,6 +63,12 @@ namespace {
 
 } // namespace
 
+ArenaTotals arena_totals() noexcept {
+    return ArenaTotals{.reservedBytes = totalReservedBytes.load(std::memory_order_relaxed),
+                       .committedBytes = totalCommittedBytes.load(std::memory_order_relaxed),
+                       .peakCommittedBytes = peakCommittedBytes.load(std::memory_order_relaxed)};
+}
+
 std::optional<Arena> Arena::create(const ArenaConfig& config) noexcept {
     const usize granularity = platform::allocation_granularity();
     const usize pageSize = platform::page_size();
@@ -65,6 +82,7 @@ std::optional<Arena> Arena::create(const ArenaConfig& config) noexcept {
     if (base == nullptr) {
         return std::nullopt;
     }
+    totalReservedBytes.fetch_add(reserveSize, std::memory_order_relaxed);
     return Arena(static_cast<std::byte*>(base), reserveSize, commitStep);
 }
 
@@ -84,7 +102,8 @@ Arena::Arena(Arena&& other) noexcept
     , m_commitStep(std::exchange(other.m_commitStep, 0U))
     , m_offset(std::exchange(other.m_offset, 0U))
     , m_highWater(std::exchange(other.m_highWater, 0U))
-    , m_lastAllocation(std::exchange(other.m_lastAllocation, noLastAllocation)) {}
+    , m_lastAllocation(std::exchange(other.m_lastAllocation, noLastAllocation))
+    , m_allocationCount(std::exchange(other.m_allocationCount, 0U)) {}
 
 Arena& Arena::operator=(Arena&& other) noexcept {
     if (this != &other) {
@@ -96,6 +115,7 @@ Arena& Arena::operator=(Arena&& other) noexcept {
         m_offset = std::exchange(other.m_offset, 0U);
         m_highWater = std::exchange(other.m_highWater, 0U);
         m_lastAllocation = std::exchange(other.m_lastAllocation, noLastAllocation);
+        m_allocationCount = std::exchange(other.m_allocationCount, 0U);
     }
     return *this;
 }
@@ -112,6 +132,8 @@ void Arena::release_reservation() noexcept {
     // same addresses would otherwise start out poisoned.
     BASE_ASAN_UNPOISON(m_base, m_committed);
     platform::release(m_base, m_reserved);
+    totalReservedBytes.fetch_sub(m_reserved, std::memory_order_relaxed);
+    totalCommittedBytes.fetch_sub(m_committed, std::memory_order_relaxed);
     m_base = nullptr;
 }
 
@@ -135,6 +157,7 @@ void* Arena::allocate_impl(usize size, usize alignment, Fill fill) noexcept {
         return nullptr;
     }
     m_lastAllocation = begin;
+    ++m_allocationCount;
     return m_base + begin;
 }
 
@@ -205,6 +228,8 @@ bool Arena::commit_up_to(usize end) noexcept {
         return false;
     }
     BASE_ASAN_POISON(m_base + m_committed, target - m_committed);
+    const usize added = target - m_committed;
+    base::atomic_fetch_max(peakCommittedBytes, totalCommittedBytes.fetch_add(added, std::memory_order_relaxed) + added);
     m_committed = target;
     return true;
 }
