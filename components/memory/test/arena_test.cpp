@@ -1,6 +1,6 @@
 #include "base/memory/arena.hpp"
 
-#include "base/core/bits.hpp"
+#include "base/core/alignment.hpp"
 #include "base/platform/virtual_memory.hpp"
 
 #include <gtest/gtest.h>

@@ -1,8 +1,8 @@
 #include "base/memory/arena.hpp"
 
+#include "base/core/alignment.hpp"
 #include "base/core/asan.hpp"
 #include "base/core/assert.hpp"
-#include "base/core/bits.hpp"
 #include "base/platform/virtual_memory.hpp"
 
 #include <algorithm>

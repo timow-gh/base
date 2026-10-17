@@ -19,7 +19,7 @@ core  <──  platform  <──  memory
 
 | Component | Target | Content |
 |---|---|---|
-| `core` | `base::core` | Platform/compiler detection (`config.hpp`), assertions `BASE_ASSERT(cond)` / `BASE_ASSERT_MSG(cond, msg)` with a replaceable handler and no cost when disabled (`assert.hpp`), alignment helpers (`bits.hpp`), byte units (`units.hpp`), ASan poisoning macros (`asan.hpp`) |
+| `core` | `base::core` | Platform/compiler detection (`config.hpp`), assertions `BASE_ASSERT(cond)` / `BASE_ASSERT_MSG(cond, msg)` with a replaceable handler and no cost when disabled (`assert.hpp`), alignment helpers (`alignment.hpp`), byte units (`units.hpp`), ASan poisoning macros (`asan.hpp`) |
 | `platform` | `base::platform` | Virtual memory: reserve, commit, decommit and release address space (Win32 and POSIX) |
 | `memory` | `base::memory` | `Arena`: a linear allocator over reserved virtual memory |
 | `profile` | `base::profile` | Profiling zones `BASE_PROFILE_SCOPE` / `BASE_PROFILE_FUNCTION` / `BASE_PROFILE_BANDWIDTH`, timed with the CPU timestamp counter and compiled out unless profiling is enabled |
