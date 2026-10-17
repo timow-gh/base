@@ -20,7 +20,7 @@ feat, fix, perf, docs, refactor, test, build, ci, chore, revert
 Recommended scopes for this repository:
 
 ```text
-core, platform, memory, containers, cmake, ci, docs, tests
+core, platform, memory, containers, bench, cmake, ci, docs, tests
 ```
 
 Use the component name as the scope for changes to one component.

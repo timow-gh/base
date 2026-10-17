@@ -229,6 +229,23 @@ Options (the defaults in brackets apply when base is the top-level project; as a
 | `base_USE_WARNINGS`, `base_WARNINGS_AS_ERRORS` | Compiler warnings, as errors [ON] |
 | `base_STATIC_ANALYSIS` | clang-tidy (Clang) / MSVC code analysis [ON] |
 | `base_USE_SCCACHE`, `base_USE_CPPCHECK`, `base_BUILD_DOCUMENTATION` | Optional tooling [OFF] |
+| `base_BENCHMARKS` | Build the container benchmarks; `benchmark/run.py` configures this for you [OFF] |
+
+## Benchmarks
+
+`benchmark/` compares the arena containers with the same STL containers on
+`std::allocator` and `std::pmr`. From the repository root:
+
+```sh
+python benchmark/run.py canary                    # ~1 s: does everything still run?
+python benchmark/run.py quick --container map     # seconds to a minute: feedback while changing code
+python benchmark/run.py full                      # ~14 min: the complete picture
+```
+
+Each run writes `report.html` and `results.json` to its own folder,
+`out/benchmarks/<compiler>/<date>_<time>_<suite>/`, and prints the paths at the end.
+See [benchmark/README.md](benchmark/README.md) for the filters, the suites and how to
+add workloads or containers.
 
 ## Adding a component
 
