@@ -1,10 +1,10 @@
 """Turns the Google Benchmark JSON of base_container_benchmarks into one HTML report.
 
-Usage: make_report.py results.json report.html [--elapsed SECONDS] [--fragment]
+Usage: make_report.py results.json report.html [--elapsed SECONDS] [--metadata FILE] [--fragment]
 
 Benchmarks are named <container>/<workload>/<implementation>/<elements>. The
-descriptions of workloads and implementations come from the run's context, so new
-ones need no change here. The statistics use the raw repetitions (run with
+descriptions of workloads and implementations come from the executable's --describe
+output (metadata.json), so new ones need no change here. The statistics use the raw repetitions (run with
 --benchmark_report_aggregates_only=false). Standard library only. --fragment leaves
 out the <!doctype html>, <head> and <body> wrapper, for hosts that add their own.
 """
@@ -145,19 +145,20 @@ def build_series(cells):
 
 
 class Metadata:
-    """Descriptions from the run's context, recorded by the benchmark executable."""
+    """Descriptions of workloads and implementations, from the executable's --describe."""
 
-    def __init__(self, context):
-        self.context = context
+    def __init__(self, data):
+        self.workloads = data.get("workloads", {})
+        self.implementations = data.get("implementations", {})
 
     def workload(self, key, field, default=""):
-        return self.context.get(f"workload_{field}/{key}", default)
+        return self.workloads.get(key, {}).get(field, default)
 
     def tags(self, key):
         return [t for t in self.workload(key, "tags").split(",") if t]
 
     def implementation(self, name):
-        return self.context.get(f"implementation/{name}", "")
+        return self.implementations.get(name, "")
 
 
 def implementation_order(names):
@@ -552,6 +553,9 @@ def main():
     parser.add_argument("results", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--elapsed", type=float, help="wall-clock seconds of the run, shown in the header")
+    parser.add_argument("--metadata", type=Path,
+                        help="output of base_container_benchmarks --describe (default: metadata.json next to the "
+                             "results); without it the report shows names only")
     parser.add_argument("--fragment", action="store_true",
                         help="write the page without <html>, <head> and <body>, for hosts that add them")
     arguments = parser.parse_args()
@@ -572,7 +576,8 @@ def main():
         f"{p[0]}/{p[1]}" for p in (parse_name(b.get("run_name", b["name"])) for b in results["benchmarks"]) if p))
     ordered_keys = sorted((k for k in first_seen if k in workloads), key=order)
 
-    metadata = Metadata(context)
+    metadata_path = arguments.metadata or arguments.results.with_name("metadata.json")
+    metadata = Metadata(json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {})
     implementations = implementation_order({i for series in workloads.values() for i in series})
     tokens = color_tokens(implementations)
     body = render_body(context, workloads, ordered_keys, metadata, implementations, tokens, arguments.elapsed)

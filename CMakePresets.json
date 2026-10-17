@@ -612,28 +612,19 @@
       "name": "build-msvc-release-benchmark",
       "inherits": "build-release",
       "configurePreset": "conf-msvc-release-benchmark",
-      "displayName": "msvc Release Benchmarks + Report",
-      "targets": [
-        "benchmark_report"
-      ]
+      "displayName": "msvc Release Benchmarks"
     },
     {
       "name": "build-gcc-release-benchmark",
       "inherits": "build-release",
       "configurePreset": "conf-gcc-release-benchmark",
-      "displayName": "gcc Release Benchmarks + Report",
-      "targets": [
-        "benchmark_report"
-      ]
+      "displayName": "gcc Release Benchmarks"
     },
     {
       "name": "build-clang-release-benchmark",
       "inherits": "build-release",
       "configurePreset": "conf-clang-release-benchmark",
-      "displayName": "clang Release Benchmarks + Report",
-      "targets": [
-        "benchmark_report"
-      ]
+      "displayName": "clang Release Benchmarks"
     },
     {
       "name": "build-gcc-debug-asan",
@@ -1609,51 +1600,6 @@
         {
           "type": "build",
           "name": "build-gcc-coverage-report"
-        }
-      ]
-    },
-    {
-      "name": "workflow-benchmark-msvc",
-      "displayName": "Windows Benchmark Workflow",
-      "description": "Configure, build and run the container benchmarks, then write the HTML report",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "conf-msvc-release-benchmark"
-        },
-        {
-          "type": "build",
-          "name": "build-msvc-release-benchmark"
-        }
-      ]
-    },
-    {
-      "name": "workflow-benchmark-gcc",
-      "displayName": "GCC Benchmark Workflow",
-      "description": "Configure, build and run the container benchmarks, then write the HTML report",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "conf-gcc-release-benchmark"
-        },
-        {
-          "type": "build",
-          "name": "build-gcc-release-benchmark"
-        }
-      ]
-    },
-    {
-      "name": "workflow-benchmark-clang",
-      "displayName": "Clang Benchmark Workflow",
-      "description": "Configure, build and run the container benchmarks, then write the HTML report",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "conf-clang-release-benchmark"
-        },
-        {
-          "type": "build",
-          "name": "build-clang-release-benchmark"
         }
       ]
     }

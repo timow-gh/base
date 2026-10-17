@@ -151,6 +151,8 @@ std::expected<Options, std::string> parse_options(std::span<char* const> argumen
             options.help = true;
         } else if (argument == "--list") {
             options.list = true;
+        } else if (argument == "--describe") {
+            options.describe = true;
         } else if (const auto suite = flag_value(argument, "--suite")) {
             options.suite = find_suite(*suite);
             if (options.suite == nullptr) {
@@ -263,6 +265,7 @@ std::string help_text() {
         "  --tag=A,B             only workloads with one of these tags: allocation, locality, churn\n"
         "  --size=N,M            these element counts instead of the suite's\n"
         "  --list                show what the flags select, then exit\n"
+        "  --describe            print the workload and implementation descriptions as JSON, then exit\n"
         "  --help                this text, then Google Benchmark's flags\n\n"
         "Filters take comma-separated names or 'all' and combine with AND; --list shows the valid names.\n"
         "Every other argument goes to Google Benchmark, e.g. --benchmark_repetitions=5 overrides the suite's.\n\n";
@@ -327,21 +330,41 @@ void add_context(std::span<const Selection> selection, const Options& options) {
     benchmark::AddCustomContext("suite", std::string(options.suite->name));
     benchmark::AddCustomContext("filters", describe_filters(options));
     benchmark::AddCustomContext("sizes", join(selected_sizes(options), ","));
+    benchmark::AddCustomContext("benchmarks", std::format("{}", selection.size()));
+}
 
-    NameSet described;
-    for (const Selection& selected : selection) {
-        const BenchmarkSpec& spec = selected.spec;
-        const std::string workload = std::format("{}/{}", spec.container, spec.workload);
-        if (described.insert(workload).second) {
-            benchmark::AddCustomContext("workload_description/" + workload, std::string(spec.description));
-            benchmark::AddCustomContext("workload_operation/" + workload, std::string(spec.operation));
-            benchmark::AddCustomContext("workload_tags/" + workload, std::string(spec.tags));
+std::string describe_json(std::span<const BenchmarkSpec> specs) {
+    const auto quoted = [](std::string_view text) {
+        std::string escaped = "\"";
+        for (const char character : text) {
+            if (character == '"' || character == '\\') {
+                escaped += '\\';
+            }
+            escaped += character;
         }
-        const std::string implementation = "implementation/" + std::string(spec.implementation);
-        if (described.insert(implementation).second) {
-            benchmark::AddCustomContext(implementation, std::string(spec.implementationDescription));
-        }
+        return escaped + "\"";
+    };
+    std::map<std::string, const BenchmarkSpec*, std::less<>> workloads;
+    std::map<std::string_view, std::string_view, std::less<>> implementations;
+    for (const BenchmarkSpec& spec : specs) {
+        workloads.try_emplace(std::format("{}/{}", spec.container, spec.workload), &spec);
+        implementations.try_emplace(spec.implementation, spec.implementationDescription);
     }
+
+    std::string json = "{\n  \"workloads\": {";
+    const char* separator = "\n";
+    for (const auto& [key, spec] : workloads) {
+        json += std::format("{}    {}: {{\"description\": {}, \"operation\": {}, \"tags\": {}}}", separator,
+                            quoted(key), quoted(spec->description), quoted(spec->operation), quoted(spec->tags));
+        separator = ",\n";
+    }
+    json += "\n  },\n  \"implementations\": {";
+    separator = "\n";
+    for (const auto& [name, description] : implementations) {
+        json += std::format("{}    {}: {}", separator, quoted(name), quoted(description));
+        separator = ",\n";
+    }
+    return json + "\n  }\n}\n";
 }
 
 } // namespace base::bench

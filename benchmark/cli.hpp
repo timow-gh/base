@@ -26,6 +26,7 @@ struct Options {
     // Empty: the suite's sizes.
     std::vector<i64> sizes;
     bool list = false;
+    bool describe = false;
     bool help = false;
     // argv[0] and every argument that is not ours, e.g. --benchmark_filter.
     std::vector<std::string> benchmarkArguments;
@@ -68,10 +69,14 @@ struct Selection {
 // Registers each selection as <container>/<workload>/<implementation>/<size>.
 void register_benchmarks(std::span<const Selection> selection);
 
-/**
- * \brief Records the suite, the filters and the description of every selected workload
- * and implementation in the JSON context, where the report reads them.
- */
+// Records the build, the suite and the filters in the JSON context, where the report
+// reads them. Kept short: Google Benchmark also prints the context on the console.
 void add_context(std::span<const Selection> selection, const Options& options);
+
+/**
+ * \brief The description, operation and tags of every workload and the description of
+ * every implementation, as JSON for the report (--describe).
+ */
+[[nodiscard]] std::string describe_json(std::span<const BenchmarkSpec> specs);
 
 } // namespace base::bench

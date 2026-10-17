@@ -37,6 +37,11 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+    if (options->describe) {
+        std::fputs(base::bench::describe_json(specs).c_str(), stdout);
+        return 0;
+    }
+
     std::vector<std::string> arguments = base::bench::benchmark_arguments(*options);
     if (options->help) {
         std::fputs(base::bench::help_text().c_str(), stdout);

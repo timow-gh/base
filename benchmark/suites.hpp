@@ -37,7 +37,7 @@ inline constexpr std::array suites{
           .minTime = "0.01s",
           .interleave = false},
     Suite{.name = "quick",
-          .purpose = "about two minutes: feedback while changing code",
+          .purpose = "about a minute: feedback while changing code",
           .sizes = quickSizes,
           .repetitions = 3,
           .minTime = "0.05s",
