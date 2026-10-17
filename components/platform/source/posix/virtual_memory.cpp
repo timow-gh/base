@@ -2,8 +2,7 @@
 
 #include "base/core/alignment.hpp"
 #include "base/core/assert.hpp"
-
-#include <cstdint>
+#include "base/core/types.hpp"
 
 #include <sys/mman.h>
 #include <unistd.h>
@@ -21,8 +20,8 @@ constexpr int reserveFlags = MAP_PRIVATE | MAP_ANONYMOUS;
 #endif
 
 // Only used in assertions, which release builds leave unevaluated.
-[[nodiscard, maybe_unused]] bool is_page_range(const void* address, std::size_t size) noexcept {
-    return size > 0U && is_aligned(reinterpret_cast<std::uintptr_t>(address), page_size()) && // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+[[nodiscard, maybe_unused]] bool is_page_range(const void* address, usize size) noexcept {
+    return size > 0U && is_aligned(reinterpret_cast<uptr>(address), page_size()) && // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
            is_aligned(size, page_size());
 }
 
@@ -32,28 +31,28 @@ constexpr int reserveFlags = MAP_PRIVATE | MAP_ANONYMOUS;
 
 } // namespace
 
-std::size_t page_size() noexcept {
-    static const auto size = static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
+usize page_size() noexcept {
+    static const auto size = static_cast<usize>(sysconf(_SC_PAGESIZE));
     return size;
 }
 
-std::size_t allocation_granularity() noexcept {
+usize allocation_granularity() noexcept {
     return page_size();
 }
 
-void* reserve(std::size_t size) noexcept {
+void* reserve(usize size) noexcept {
     BASE_ASSERT_MSG(size > 0U && is_aligned(size, allocation_granularity()),
                     "reserve size must be a non-zero multiple of the allocation granularity");
     void* address = mmap(nullptr, size, PROT_NONE, reserveFlags, -1, 0);
     return is_map_failed(address) ? nullptr : address;
 }
 
-bool commit(void* address, std::size_t size) noexcept {
+bool commit(void* address, usize size) noexcept {
     BASE_ASSERT(is_page_range(address, size));
     return mprotect(address, size, PROT_READ | PROT_WRITE) == 0;
 }
 
-void decommit(void* address, std::size_t size) noexcept {
+void decommit(void* address, usize size) noexcept {
     BASE_ASSERT(is_page_range(address, size));
     // Mapping fresh PROT_NONE pages over the range drops the physical pages and
     // guarantees zeroed memory on the next commit on every POSIX system, unlike
@@ -62,7 +61,7 @@ void decommit(void* address, std::size_t size) noexcept {
     BASE_ASSERT_MSG(!is_map_failed(remapped), "mmap(MAP_FIXED) failed to decommit");
 }
 
-void release(void* address, std::size_t size) noexcept {
+void release(void* address, usize size) noexcept {
     BASE_ASSERT(address != nullptr);
     [[maybe_unused]] const int unmapped = munmap(address, size);
     BASE_ASSERT_MSG(unmapped == 0, "munmap failed");

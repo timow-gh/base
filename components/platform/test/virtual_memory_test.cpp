@@ -1,19 +1,20 @@
 #include "base/platform/virtual_memory.hpp"
 
 #include "base/core/alignment.hpp"
+#include "base/core/types.hpp"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <span>
 
 namespace vm = base::platform;
+using namespace base::types;
 
 namespace {
 
-[[nodiscard]] std::span<std::byte> as_bytes(void* address, std::size_t size) {
+[[nodiscard]] std::span<std::byte> as_bytes(void* address, usize size) {
     return {static_cast<std::byte*>(address), size};
 }
 
@@ -26,19 +27,19 @@ TEST(VirtualMemory, PageSizeAndGranularityArePowersOfTwo) {
 }
 
 TEST(VirtualMemory, ReserveReturnsGranularityAlignedRange) {
-    const std::size_t size = vm::allocation_granularity() * 4U;
+    const usize size = vm::allocation_granularity() * 4U;
     void* address = vm::reserve(size);
     ASSERT_NE(address, nullptr);
-    EXPECT_TRUE(base::is_aligned(reinterpret_cast<std::uintptr_t>(address), vm::allocation_granularity()));
+    EXPECT_TRUE(base::is_aligned(reinterpret_cast<uptr>(address), vm::allocation_granularity()));
     vm::release(address, size);
 }
 
 TEST(VirtualMemory, CommittedPagesAreZeroAndWritable) {
-    const std::size_t size = vm::allocation_granularity() * 4U;
+    const usize size = vm::allocation_granularity() * 4U;
     void* address = vm::reserve(size);
     ASSERT_NE(address, nullptr);
 
-    const std::size_t pageSize = vm::page_size();
+    const usize pageSize = vm::page_size();
     ASSERT_TRUE(vm::commit(address, pageSize * 2U));
     std::span<std::byte> bytes = as_bytes(address, pageSize * 2U);
     EXPECT_TRUE(std::ranges::all_of(bytes, [](std::byte value) { return value == std::byte{0}; }));
@@ -51,11 +52,11 @@ TEST(VirtualMemory, CommittedPagesAreZeroAndWritable) {
 }
 
 TEST(VirtualMemory, RecommitAfterDecommitReturnsZeroedPages) {
-    const std::size_t size = vm::allocation_granularity();
+    const usize size = vm::allocation_granularity();
     void* address = vm::reserve(size);
     ASSERT_NE(address, nullptr);
 
-    const std::size_t pageSize = vm::page_size();
+    const usize pageSize = vm::page_size();
     ASSERT_TRUE(vm::commit(address, pageSize));
     std::ranges::fill(as_bytes(address, pageSize), std::byte{0xCD});
 
@@ -69,7 +70,7 @@ TEST(VirtualMemory, RecommitAfterDecommitReturnsZeroedPages) {
 
 TEST(VirtualMemory, LargeReservationDoesNotCommitMemory) {
     // 64 GiB of address space is cheap; only committed pages cost memory.
-    const std::size_t size = std::size_t{64} * 1024U * 1024U * 1024U;
+    const usize size = usize{64} * 1024U * 1024U * 1024U;
     void* address = vm::reserve(size);
     ASSERT_NE(address, nullptr);
     ASSERT_TRUE(vm::commit(address, vm::page_size()));
