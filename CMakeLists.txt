@@ -59,6 +59,9 @@ else ()
 endif ()
 option(${PROJECT_NAME}_INSTALL "Install project targets" ${${PROJECT_NAME}_INSTALL_DEFAULT})
 option(${PROJECT_NAME}_BUILD_DOCUMENTATION "Build API documentation with Doxygen" OFF)
+# Off even for the top-level project: the benchmarks download Google Benchmark and
+# only make sense in release builds, see the *-benchmark presets.
+option(${PROJECT_NAME}_BENCHMARKS "Build the container benchmarks (Google Benchmark)" OFF)
 # The components are static libraries. PIC lets consumers link them into their
 # own shared libraries.
 option(${PROJECT_NAME}_POSITION_INDEPENDENT_CODE "Compile the components as position independent code" ON)
@@ -101,6 +104,10 @@ set(${PROJECT_NAME}_COMPONENTS "${${PROJECT_NAME}_DECLARED_COMPONENTS}" CACHE ST
 base_resolve_components(${PROJECT_NAME}_RESOLVED_COMPONENTS ${${PROJECT_NAME}_COMPONENTS})
 message(STATUS "${PROJECT_NAME} components: ${${PROJECT_NAME}_RESOLVED_COMPONENTS}")
 
+if (${PROJECT_NAME}_BENCHMARKS AND NOT "containers" IN_LIST ${PROJECT_NAME}_RESOLVED_COMPONENTS)
+    message(FATAL_ERROR "${PROJECT_NAME}_BENCHMARKS needs the containers component")
+endif ()
+
 add_subdirectory(dependencies)
 
 # Before the components: they register their unit tests.
@@ -128,6 +135,10 @@ if (${PROJECT_NAME}_TESTS)
         message(STATUS "Coverage enabled - adding coverage-report target")
         include(${PROJECT_SOURCE_DIR}/cmake/coverage.cmake)
     endif()
+endif ()
+
+if (${PROJECT_NAME}_BENCHMARKS)
+    add_subdirectory(benchmark)
 endif ()
 
 if (${PROJECT_NAME}_INSTALL)

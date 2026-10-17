@@ -313,6 +313,42 @@
       }
     },
     {
+      "name": "conf-benchmark-common",
+      "description": "Builds the container benchmarks instead of the tests",
+      "hidden": true,
+      "cacheVariables": {
+        "base_BENCHMARKS": "ON",
+        "base_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "conf-msvc-release-benchmark",
+      "displayName": "msvc Release (User Mode) + Benchmarks",
+      "description": "msvc release build of the container benchmarks",
+      "inherits": [
+        "conf-msvc-release",
+        "conf-benchmark-common"
+      ]
+    },
+    {
+      "name": "conf-gcc-release-benchmark",
+      "displayName": "gcc Release + Benchmarks",
+      "description": "gcc release build of the container benchmarks",
+      "inherits": [
+        "conf-gcc-release",
+        "conf-benchmark-common"
+      ]
+    },
+    {
+      "name": "conf-clang-release-benchmark",
+      "displayName": "clang Release + Benchmarks",
+      "description": "clang release build of the container benchmarks",
+      "inherits": [
+        "conf-clang-release",
+        "conf-benchmark-common"
+      ]
+    },
+    {
       "name": "conf-gcc-debug-asan",
       "displayName": "gcc Debug + AddressSanitizer",
       "description": "Debug build with AddressSanitizer for memory error detection",
@@ -571,6 +607,33 @@
       "inherits": "build-release",
       "configurePreset": "conf-clang-release-profile",
       "displayName": "clang Release + Profiling Build"
+    },
+    {
+      "name": "build-msvc-release-benchmark",
+      "inherits": "build-release",
+      "configurePreset": "conf-msvc-release-benchmark",
+      "displayName": "msvc Release Benchmarks + Report",
+      "targets": [
+        "benchmark_report"
+      ]
+    },
+    {
+      "name": "build-gcc-release-benchmark",
+      "inherits": "build-release",
+      "configurePreset": "conf-gcc-release-benchmark",
+      "displayName": "gcc Release Benchmarks + Report",
+      "targets": [
+        "benchmark_report"
+      ]
+    },
+    {
+      "name": "build-clang-release-benchmark",
+      "inherits": "build-release",
+      "configurePreset": "conf-clang-release-benchmark",
+      "displayName": "clang Release Benchmarks + Report",
+      "targets": [
+        "benchmark_report"
+      ]
     },
     {
       "name": "build-gcc-debug-asan",
@@ -1546,6 +1609,51 @@
         {
           "type": "build",
           "name": "build-gcc-coverage-report"
+        }
+      ]
+    },
+    {
+      "name": "workflow-benchmark-msvc",
+      "displayName": "Windows Benchmark Workflow",
+      "description": "Configure, build and run the container benchmarks, then write the HTML report",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "conf-msvc-release-benchmark"
+        },
+        {
+          "type": "build",
+          "name": "build-msvc-release-benchmark"
+        }
+      ]
+    },
+    {
+      "name": "workflow-benchmark-gcc",
+      "displayName": "GCC Benchmark Workflow",
+      "description": "Configure, build and run the container benchmarks, then write the HTML report",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "conf-gcc-release-benchmark"
+        },
+        {
+          "type": "build",
+          "name": "build-gcc-release-benchmark"
+        }
+      ]
+    },
+    {
+      "name": "workflow-benchmark-clang",
+      "displayName": "Clang Benchmark Workflow",
+      "description": "Configure, build and run the container benchmarks, then write the HTML report",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "conf-clang-release-benchmark"
+        },
+        {
+          "type": "build",
+          "name": "build-clang-release-benchmark"
         }
       ]
     }
