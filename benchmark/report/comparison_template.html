@@ -1,0 +1,107 @@
+<title>Benchmark Commit Comparison</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/*__REPORT_STYLE__*/
+</style>
+
+<div class="page">
+/*__REPORT_BODY__*/
+</div>
+
+<script type="application/json" id="report-data">/*__REPORT_DATA__*/</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+/*__COMMON_SCRIPT__*/
+</script>
+<script>
+(function () {
+  "use strict";
+  const data = JSON.parse(document.getElementById("report-data").textContent);
+  const helpers = window.reportCharts;
+  const token = helpers.token, sizeAxis = helpers.sizeAxis, valueAxis = helpers.valueAxis,
+    baseOptions = helpers.baseOptions, bandDatasets = helpers.bandDatasets;
+
+  function implementationColor(implementation) {
+    return token(data.colorTokens[implementation] || "--muted");
+  }
+  function label(implementation) {
+    return data.labels[implementation] || implementation;
+  }
+  function formatSpeedup(value) {
+    return Number(value).toPrecision(3) + "×";
+  }
+  function parity(from, to) {
+    return {
+      label: "_parity", data: [{ x: from, y: 1 }, { x: to, y: 1 }],
+      borderColor: token("--muted"), borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0
+    };
+  }
+
+  function sizesChart(canvas, workload) {
+    const datasets = [];
+    workload.implementations.forEach(function (implementation) {
+      const points = workload.bySize[implementation] || [];
+      if (points.length === 0) return;
+      const color = implementationColor(implementation);
+      bandDatasets(points, "speedupLow", "speedupHigh", color).forEach(function (d) { datasets.push(d); });
+      datasets.push({
+        label: label(implementation),
+        data: points.map(function (p) { return { x: p.n, y: p.speedup, cell: p }; }),
+        borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 3, tension: 0
+      });
+    });
+    datasets.push(parity(workload.sizes[0], workload.sizes[workload.sizes.length - 1]));
+    return new Chart(canvas, {
+      type: "line",
+      data: { datasets: datasets },
+      options: baseOptions(
+        { x: sizeAxis(workload.sizes, "elements (n)"),
+          y: valueAxis("logarithmic", data.last + " vs " + data.commits[0] + " (×)", formatSpeedup) },
+        function (context) {
+          const cell = context.raw.cell;
+          return context.dataset.label + ": " + cell.speedup.toFixed(3) + "×  (≈ " + cell.speedupLow.toFixed(2) +
+            "× – " + cell.speedupHigh.toFixed(2) + "×)";
+        })
+    });
+  }
+
+  function commitsChart(canvas, workload) {
+    const datasets = workload.implementations.map(function (implementation) {
+      const color = implementationColor(implementation);
+      return {
+        label: label(implementation),
+        data: workload.byCommit[implementation].map(function (value, index) { return { x: index, y: value }; })
+          .filter(function (point) { return point.y !== null; }),
+        borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 3, tension: 0
+      };
+    });
+    datasets.push(parity(0, data.commits.length - 1));
+    const axis = valueAxis("linear", "commit", function (v) { return Number.isInteger(v) ? data.commits[v] || "" : ""; });
+    axis.min = 0;
+    axis.max = data.commits.length - 1;
+    axis.ticks.stepSize = 1;
+    return new Chart(canvas, {
+      type: "line",
+      data: { datasets: datasets },
+      options: baseOptions(
+        { x: axis, y: valueAxis("linear", "speedup vs " + data.commits[0] + " (×)", formatSpeedup) },
+        function (context) {
+          return context.dataset.label + " at " + data.commits[context.raw.x] + ": " + context.raw.y.toFixed(3) + "×";
+        })
+    });
+  }
+
+  const builders = { sizes: sizesChart, commits: commitsChart };
+
+  helpers.renderCharts(function (add) {
+    data.workloads.forEach(function (workload) {
+      document.querySelectorAll('canvas[data-workload="' + workload.key + '"]').forEach(function (canvas) {
+        add(builders[canvas.dataset.chart](canvas, workload));
+      });
+    });
+  });
+})();
+</script>

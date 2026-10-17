@@ -90,6 +90,44 @@ everything:
 The inputs come from fixed seeds without the standard library's distributions, so
 every implementation and compiler sees the same keys and strings.
 
+## Compare commits
+
+`compare.py` runs the same selection on several commits and puts them side by side:
+
+```sh
+python benchmark/compare.py HEAD~1 HEAD full                 # did the last commit make a difference?
+python benchmark/compare.py main HEAD WORKTREE quick --container vector
+python benchmark/compare.py v1.0 main --rounds 3             # alternate the commits three times
+python benchmark/compare.py --clean                          # remove the checkouts
+```
+
+The first revision is the baseline; any commit, branch or tag works, and `WORKTREE`
+is the working tree with its uncommitted changes. The suite and the filters are those
+of `run.py`. Each commit is checked out once in `out/compare/src/<sha>/` and built
+there with the commit's own library code, but with today's `benchmark/` folder and
+`CMakePresets.json`, so every commit runs the same workloads with the same flags. That
+works from 246cdbb, the first commit that builds the benchmarks; older ones are
+refused. Checkouts stay for incremental rebuilds, and Google Benchmark is downloaded
+once into `out/compare/cpm-cache/`.
+
+Every commit is built before the first one runs. Then the commits run one after the
+other; with `--rounds N` they take turns N times in rotating order and their
+repetitions are merged, which spreads drift of the machine over all of them at N times
+the run time. The results go to one folder:
+
+```
+out/benchmarks/<compiler>/<date>_<time>_compare_<suite>/
+    comparison.html   speedup of every commit against the baseline, per implementation,
+                      workload and size, with 95 % confidence intervals
+    comparison.json   the medians and speedups of every cell
+    commits.json      the commits, their subjects and run times
+    <short sha>/      one run as run.py writes it, with its own report.html
+```
+
+`std` and `pmr` don't use base's allocators, so their change between commits is the
+machine, not the code: read it as the noise floor. To rebuild the page, run
+`python benchmark/report/make_comparison.py <folder>`.
+
 ## Running the executable directly
 
 The runner calls `base_container_benchmarks` from the build folder

@@ -240,12 +240,13 @@ Options (the defaults in brackets apply when base is the top-level project; as a
 python benchmark/run.py canary                    # ~1 s: does everything still run?
 python benchmark/run.py quick --container map     # seconds to a minute: feedback while changing code
 python benchmark/run.py full                      # ~14 min: the complete picture
+python benchmark/compare.py main HEAD WORKTREE quick  # the same benchmarks on several commits, one report
 ```
 
 Each run writes `report.html` and `results.json` to its own folder,
 `out/benchmarks/<compiler>/<date>_<time>_<suite>/`, and prints the paths at the end.
-See [benchmark/README.md](benchmark/README.md) for the filters, the suites and how to
-add workloads or containers.
+See [benchmark/README.md](benchmark/README.md) for the filters, the suites, comparing
+commits and how to add workloads or containers.
 
 ## Adding a component
 
