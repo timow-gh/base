@@ -6,23 +6,28 @@
 #include <benchmark/benchmark.h>
 
 #include <string_view>
+#include <vector>
 
 namespace base::bench {
 
 namespace {
 
-// A string built from small appends, e.g. a log line or generated code: geometric
-// growth like a vector, with the small-string buffer in front.
 struct StringAppend {
-    static constexpr std::string_view name = "string_append";
+    using Container = StringKind;
+    static constexpr std::string_view name = "append";
+    static constexpr std::string_view tags = "allocation";
+    static constexpr std::string_view operation = "one 16-byte append";
+    static constexpr std::string_view description =
+        "Builds an n-byte string from 16-byte appends, like a log line or generated text: geometric growth like a "
+        "vector, with the small-string buffer in front.";
     static constexpr i64 maxElements = defaultMaxElements;
     static constexpr std::string_view chunk = "0123456789abcdef";
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto length = static_cast<usize>(state.range(0));
         const usize appends = length / chunk.size();
-        run_workload<Variant>(state,
+        run_workload<Implementation>(state,
                               {.elements = length, .operations = appends},
                               [appends]<typename Containers>(auto&& source, [[maybe_unused]] auto&& checkpoint) {
                                   typename Containers::String text(source);
@@ -37,8 +42,8 @@ struct StringAppend {
 
 } // namespace
 
-void register_string_benchmarks() {
-    register_workload<StringAppend>(AllVariants{});
+std::vector<BenchmarkSpec> string_benchmarks() {
+    return specs_for<StringAppend>(AllImplementations{});
 }
 
 } // namespace base::bench

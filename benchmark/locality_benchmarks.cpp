@@ -21,7 +21,7 @@ namespace {
  * bytes after each insert, as other code on a real program's heap would.
  *
  * With std::allocator the nodes end up interleaved with those blocks; the arena and
- * pmr variants place them next to each other regardless. The returned blocks must
+ * pmr implementations place them next to each other regardless. The returned blocks must
  * stay alive while the map is measured.
  */
 template <typename Map>
@@ -38,17 +38,23 @@ template <typename Map>
     return noise;
 }
 
-// Lookups on a map built before the timed loop: only node locality differs.
 struct MapLookupPrebuilt {
-    static constexpr std::string_view name = "map_lookup_prebuilt";
+    using Container = MapKind;
+    static constexpr std::string_view name = "lookup_prebuilt";
+    static constexpr std::string_view tags = "locality";
+    static constexpr std::string_view operation = "one lookup";
+    static constexpr std::string_view description =
+        "Times only the lookups on a map built before the loop, so only node placement differs. With "
+        "std::allocator the nodes were allocated between unrelated 16 to 256-byte heap blocks, as on a heap in "
+        "use; arena and pmr nodes sit next to each other.";
     static constexpr i64 maxElements = defaultMaxElements;
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto count = static_cast<usize>(state.range(0));
         const std::span<const u64> keys = shuffled_keys(count, 0);
         const std::span<const u64> lookups = shuffled_keys(count, 1);
-        Variant::with_source([&]<typename Containers>(auto&& source) {
+        Implementation::with_source([&]<typename Containers>(auto&& source) {
             typename Containers::template Map<u64, u64> map(source);
             const auto noise = insert_between_heap_noise(map, keys);
             for ([[maybe_unused]] auto iteration : state) {
@@ -64,16 +70,20 @@ struct MapLookupPrebuilt {
     }
 };
 
-// A full in-order traversal: pure pointer chasing from node to node.
 struct MapIteratePrebuilt {
-    static constexpr std::string_view name = "map_iterate_prebuilt";
+    using Container = MapKind;
+    static constexpr std::string_view name = "iterate_prebuilt";
+    static constexpr std::string_view tags = "locality";
+    static constexpr std::string_view operation = "one element visited";
+    static constexpr std::string_view description =
+        "A full in-order traversal of a map built before the loop: pure pointer chasing from node to node.";
     static constexpr i64 maxElements = defaultMaxElements;
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto count = static_cast<usize>(state.range(0));
         const std::span<const u64> keys = shuffled_keys(count, 0);
-        Variant::with_source([&]<typename Containers>(auto&& source) {
+        Implementation::with_source([&]<typename Containers>(auto&& source) {
             typename Containers::template Map<u64, u64> map(source);
             const auto noise = insert_between_heap_noise(map, keys);
             for ([[maybe_unused]] auto iteration : state) {
@@ -90,16 +100,22 @@ struct MapIteratePrebuilt {
 };
 
 struct UnorderedMapLookupPrebuilt {
-    static constexpr std::string_view name = "unordered_map_lookup_prebuilt";
+    using Container = UnorderedMapKind;
+    static constexpr std::string_view name = "lookup_prebuilt";
+    static constexpr std::string_view tags = "locality";
+    static constexpr std::string_view operation = "one lookup";
+    static constexpr std::string_view description =
+        "Lookups (90 % Zipf-distributed hits) on an unordered_map built before the loop; with std::allocator "
+        "its nodes are interleaved with unrelated heap blocks.";
     static constexpr i64 maxElements = defaultMaxElements;
     static constexpr f64 hitRatio = 0.9;
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto count = static_cast<usize>(state.range(0));
         const std::span<const u64> keys = uniform_keys(count);
         const std::span<const u64> lookups = lookup_keys(count, count, hitRatio);
-        Variant::with_source([&]<typename Containers>(auto&& source) {
+        Implementation::with_source([&]<typename Containers>(auto&& source) {
             typename Containers::template UnorderedMap<u64, u64> map(source);
             const auto noise = insert_between_heap_noise(map, keys);
             for ([[maybe_unused]] auto iteration : state) {
@@ -119,10 +135,10 @@ struct UnorderedMapLookupPrebuilt {
 
 } // namespace
 
-void register_locality_benchmarks() {
-    register_workload<MapLookupPrebuilt>(PrebuiltVariants{});
-    register_workload<MapIteratePrebuilt>(PrebuiltVariants{});
-    register_workload<UnorderedMapLookupPrebuilt>(PrebuiltVariants{});
+std::vector<BenchmarkSpec> locality_benchmarks() {
+    return concat({specs_for<MapLookupPrebuilt>(PrebuiltImplementations{}),
+                   specs_for<MapIteratePrebuilt>(PrebuiltImplementations{}),
+                   specs_for<UnorderedMapLookupPrebuilt>(PrebuiltImplementations{})});
 }
 
 } // namespace base::bench

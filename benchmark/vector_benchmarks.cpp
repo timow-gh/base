@@ -9,22 +9,27 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace base::bench {
 
 namespace {
 
-// Growth without reserve: the arena variants leave every outgrown buffer behind, which
-// shows in peak_bytes.
 struct VectorPushBack {
-    static constexpr std::string_view name = "vector_push_back";
+    using Container = VectorKind;
+    static constexpr std::string_view name = "push_back";
+    static constexpr std::string_view tags = "allocation";
+    static constexpr std::string_view operation = "one push_back";
+    static constexpr std::string_view description =
+        "Appends n random u64 to an empty vector without reserve. The vector grows geometrically; the arena and "
+        "pmr implementations keep every outgrown buffer, which shows in the memory chart.";
     static constexpr i64 maxElements = defaultMaxElements;
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto count = static_cast<usize>(state.range(0));
         const std::span<const u64> keys = uniform_keys(count);
-        run_workload<Variant>(state,
+        run_workload<Implementation>(state,
                               {.elements = count, .operations = count},
                               [keys]<typename Containers>(auto&& source, [[maybe_unused]] auto&& checkpoint) {
                                   typename Containers::template Vector<u64> values(source);
@@ -37,16 +42,20 @@ struct VectorPushBack {
     }
 };
 
-// One allocation of the final size: isolates the allocation path from the growth.
 struct VectorPushBackReserved {
-    static constexpr std::string_view name = "vector_push_back_reserved";
+    using Container = VectorKind;
+    static constexpr std::string_view name = "push_back_reserved";
+    static constexpr std::string_view tags = "allocation";
+    static constexpr std::string_view operation = "one push_back";
+    static constexpr std::string_view description =
+        "The same appends after reserve(n): a single allocation, so the loop itself dominates.";
     static constexpr i64 maxElements = defaultMaxElements;
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto count = static_cast<usize>(state.range(0));
         const std::span<const u64> keys = uniform_keys(count);
-        run_workload<Variant>(state,
+        run_workload<Implementation>(state,
                               {.elements = count, .operations = count},
                               [keys]<typename Containers>(auto&& source, [[maybe_unused]] auto&& checkpoint) {
                                   typename Containers::template Vector<u64> values(source);
@@ -60,19 +69,25 @@ struct VectorPushBackReserved {
     }
 };
 
-// Nested containers: a vector of strings, all from the same source. Short strings fit
-// the small-string buffer and only the vector allocates; long strings allocate each.
 template <StringLength length>
 struct VectorOfStrings {
-    static constexpr std::string_view name =
-        length == StringLength::Short ? "vector_of_short_strings" : "vector_of_long_strings";
+    using Container = VectorKind;
+    static constexpr std::string_view name = length == StringLength::Short ? "short_strings" : "long_strings";
+    static constexpr std::string_view tags = "allocation";
+    static constexpr std::string_view operation = "one string appended";
+    static constexpr std::string_view description =
+        length == StringLength::Short
+            ? "Copies n strings of 4 to 15 characters into a vector of strings that share the vector's allocator. "
+              "They fit the small-string buffer, so only the vector allocates."
+            : "Copies n strings of 32 to 128 characters into a vector of strings that share the vector's "
+              "allocator: every string allocates, nested inside the vector.";
     static constexpr i64 maxElements = defaultMaxElements;
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto count = static_cast<usize>(state.range(0));
         const std::span<const std::string> texts = random_strings(count, length);
-        run_workload<Variant>(state,
+        run_workload<Implementation>(state,
                               {.elements = count, .operations = count},
                               [texts]<typename Containers>(auto&& source, [[maybe_unused]] auto&& checkpoint) {
                                   using String = typename Containers::String;
@@ -80,7 +95,7 @@ struct VectorOfStrings {
                                   for (const std::string& text : texts) {
                                       // Constructed with the source and moved in: a pmr vector
                                       // would append its own allocator to emplace_back's
-                                      // arguments, the other variants would not.
+                                      // arguments, the other implementations would not.
                                       lines.emplace_back(String(text.data(), text.size(), source));
                                   }
                                   benchmark::DoNotOptimize(lines.data());
@@ -91,11 +106,11 @@ struct VectorOfStrings {
 
 } // namespace
 
-void register_vector_benchmarks() {
-    register_workload<VectorPushBack>(AllVariants{});
-    register_workload<VectorPushBackReserved>(AllVariants{});
-    register_workload<VectorOfStrings<StringLength::Short>>(AllVariants{});
-    register_workload<VectorOfStrings<StringLength::Long>>(AllVariants{});
+std::vector<BenchmarkSpec> vector_benchmarks() {
+    return concat({specs_for<VectorPushBack>(AllImplementations{}),
+                   specs_for<VectorPushBackReserved>(AllImplementations{}),
+                   specs_for<VectorOfStrings<StringLength::Short>>(AllImplementations{}),
+                   specs_for<VectorOfStrings<StringLength::Long>>(AllImplementations{})});
 }
 
 } // namespace base::bench

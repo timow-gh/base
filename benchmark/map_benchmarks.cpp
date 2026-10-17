@@ -8,23 +8,28 @@
 
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace base::bench {
 
 namespace {
 
-// Ordered node containers: one allocation per element, which is where an arena's
-// pointer bump should beat a general-purpose heap most clearly.
 struct MapInsertLookup {
-    static constexpr std::string_view name = "map_insert_lookup";
+    using Container = MapKind;
+    static constexpr std::string_view name = "insert_lookup";
+    static constexpr std::string_view tags = "allocation";
+    static constexpr std::string_view operation = "one insert or one lookup";
+    static constexpr std::string_view description =
+        "Inserts n unique keys in random order, then looks each one up in another random order. One allocation "
+        "per element, where an arena's pointer bump should beat a general-purpose heap most clearly.";
     static constexpr i64 maxElements = defaultMaxElements;
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto count = static_cast<usize>(state.range(0));
         const std::span<const u64> keys = shuffled_keys(count, 0);
         const std::span<const u64> lookups = shuffled_keys(count, 1);
-        run_workload<Variant>(
+        run_workload<Implementation>(
             state,
             {.elements = count, .operations = 2U * count},
             [keys, lookups]<typename Containers>(auto&& source, [[maybe_unused]] auto&& checkpoint) {
@@ -42,15 +47,20 @@ struct MapInsertLookup {
 };
 
 struct SetInsertContains {
-    static constexpr std::string_view name = "set_insert_contains";
+    using Container = SetKind;
+    static constexpr std::string_view name = "insert_contains";
+    static constexpr std::string_view tags = "allocation";
+    static constexpr std::string_view operation = "one insert or one contains";
+    static constexpr std::string_view description =
+        "Inserts n unique keys in random order, then checks each one in another random order.";
     static constexpr i64 maxElements = defaultMaxElements;
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto count = static_cast<usize>(state.range(0));
         const std::span<const u64> keys = shuffled_keys(count, 0);
         const std::span<const u64> lookups = shuffled_keys(count, 1);
-        run_workload<Variant>(
+        run_workload<Implementation>(
             state,
             {.elements = count, .operations = 2U * count},
             [keys, lookups]<typename Containers>(auto&& source, [[maybe_unused]] auto&& checkpoint) {
@@ -69,9 +79,9 @@ struct SetInsertContains {
 
 } // namespace
 
-void register_map_benchmarks() {
-    register_workload<MapInsertLookup>(AllVariants{});
-    register_workload<SetInsertContains>(AllVariants{});
+std::vector<BenchmarkSpec> map_benchmarks() {
+    return concat(
+        {specs_for<MapInsertLookup>(AllImplementations{}), specs_for<SetInsertContains>(AllImplementations{})});
 }
 
 } // namespace base::bench

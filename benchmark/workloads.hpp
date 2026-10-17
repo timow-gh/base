@@ -1,12 +1,17 @@
 #pragma once
 
+#include "registry.hpp"
+
+#include <vector>
+
 namespace base::bench {
 
-void register_vector_benchmarks();
-void register_string_benchmarks();
-void register_map_benchmarks();
-void register_unordered_benchmarks();
-void register_locality_benchmarks();
-void register_churn_benchmarks();
+// The benchmarks of each workload file, one spec per workload and implementation.
+[[nodiscard]] std::vector<BenchmarkSpec> vector_benchmarks();
+[[nodiscard]] std::vector<BenchmarkSpec> string_benchmarks();
+[[nodiscard]] std::vector<BenchmarkSpec> map_benchmarks();
+[[nodiscard]] std::vector<BenchmarkSpec> unordered_benchmarks();
+[[nodiscard]] std::vector<BenchmarkSpec> locality_benchmarks();
+[[nodiscard]] std::vector<BenchmarkSpec> churn_benchmarks();
 
 } // namespace base::bench

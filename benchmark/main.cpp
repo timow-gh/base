@@ -1,51 +1,72 @@
+#include "cli.hpp"
+#include "registry.hpp"
 #include "workloads.hpp"
 
-#include "base/core/config.hpp"
-#include "base/memory/arena.hpp"
+#include "base/core/types.hpp"
 
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
+#include <cstdio>
+#include <span>
 #include <string>
+#include <vector>
 
-namespace {
-
-[[nodiscard]] std::string compiler_name() {
-#if BASE_COMPILER_CLANG
-    return "clang " __clang_version__;
-#elif BASE_COMPILER_MSVC
-    return "msvc " + std::to_string(_MSC_FULL_VER);
-#else
-    return "gcc " __VERSION__;
-#endif
-}
-
-// Recorded in the JSON "context", so the report can warn about results that do not
-// measure an optimized build.
-void add_context() {
-    benchmark::AddCustomContext("base_build_type", BASE_BENCH_BUILD_TYPE);
-    benchmark::AddCustomContext("base_commit", BASE_BENCH_GIT_COMMIT);
-    benchmark::AddCustomContext("compiler", compiler_name());
-    benchmark::AddCustomContext("arena_debug_checks", base::memory::Arena::debug_checks_enabled() ? "on" : "off");
-    benchmark::AddCustomContext("asserts", BASE_ENABLE_ASSERTS ? "on" : "off");
-    benchmark::AddCustomContext("asan", BASE_HAS_ASAN ? "on" : "off");
-}
-
-} // namespace
+using namespace base::types;
 
 int main(int argc, char** argv) {
-    benchmark::Initialize(&argc, argv);
-    if (benchmark::ReportUnrecognizedArguments(argc, argv)) {
+    using base::bench::BenchmarkSpec;
+
+    std::vector<BenchmarkSpec> specs = base::bench::concat({
+        base::bench::vector_benchmarks(),
+        base::bench::string_benchmarks(),
+        base::bench::map_benchmarks(),
+        base::bench::unordered_benchmarks(),
+        base::bench::locality_benchmarks(),
+        base::bench::churn_benchmarks(),
+    });
+    // Grouped by container for --list and the run order; stable, so each file's order
+    // of workloads stays.
+    std::ranges::stable_sort(specs, {}, [](const BenchmarkSpec& spec) {
+        return std::ranges::find(base::bench::containerOrder, spec.container) - base::bench::containerOrder.begin();
+    });
+
+    const auto options = base::bench::parse_options(std::span<char* const>(argv, static_cast<usize>(argc)), specs);
+    if (!options) {
+        std::fprintf(stderr, "error: %s\n", options.error().c_str());
+        return 2;
+    }
+
+    std::vector<std::string> arguments = base::bench::benchmark_arguments(*options);
+    if (options->help) {
+        std::fputs(base::bench::help_text().c_str(), stdout);
+        // Google Benchmark prints its own flags for --help and exits.
+        arguments.emplace_back("--help");
+    }
+
+    const std::vector<base::bench::Selection> selection = base::bench::select(specs, *options);
+    if (options->list) {
+        std::fputs(base::bench::list_text(selection, *options).c_str(), stdout);
+        return 0;
+    }
+    if (selection.empty() && !options->help) {
+        std::fputs("error: no benchmark matches the filters; --list shows what each filter selects\n", stderr);
+        return 2;
+    }
+
+    std::vector<char*> argumentPointers;
+    for (std::string& argument : arguments) {
+        argumentPointers.push_back(argument.data());
+    }
+    argumentPointers.push_back(nullptr);
+    int argumentCount = static_cast<int>(arguments.size());
+    benchmark::Initialize(&argumentCount, argumentPointers.data());
+    if (benchmark::ReportUnrecognizedArguments(argumentCount, argumentPointers.data())) {
         return 1;
     }
-    add_context();
 
-    base::bench::register_vector_benchmarks();
-    base::bench::register_string_benchmarks();
-    base::bench::register_map_benchmarks();
-    base::bench::register_unordered_benchmarks();
-    base::bench::register_locality_benchmarks();
-    base::bench::register_churn_benchmarks();
-
+    base::bench::add_context(selection, *options);
+    base::bench::register_benchmarks(selection);
     benchmark::RunSpecifiedBenchmarks();
     benchmark::Shutdown();
     return 0;

@@ -5,6 +5,7 @@ set(benchmark_target ${PROJECT_NAME}_container_benchmarks)
 
 add_executable(${benchmark_target}
         churn_benchmarks.cpp
+        cli.cpp
         locality_benchmarks.cpp
         main.cpp
         map_benchmarks.cpp

@@ -8,6 +8,7 @@
 
 #include <span>
 #include <string_view>
+#include <vector>
 #include <type_traits>
 
 namespace base::bench {
@@ -20,21 +21,27 @@ namespace {
  * documents as unsuitable.
  *
  * std::allocator reuses the freed nodes, so its footprint stays flat; the arena and pmr
- * variants never reuse them and grow with every operation. The checkpoints after the
+ * implementations never reuse them and grow with every operation. The checkpoints after the
  * fill and after every `elements` operations show the growth.
  */
 template <bool ordered>
 struct MapChurn {
-    static constexpr std::string_view name = ordered ? "map_churn" : "unordered_map_churn";
+    using Container = std::conditional_t<ordered, MapKind, UnorderedMapKind>;
+    static constexpr std::string_view name = "churn";
+    static constexpr std::string_view tags = "churn";
+    static constexpr std::string_view operation = "one erase plus one insert";
+    static constexpr std::string_view description =
+        "A container that holds n entries erases its oldest key and inserts a new one, 8n times. std::allocator "
+        "reuses the freed nodes; the arena and pmr never do, so their memory grows with every operation.";
     // Each iteration touches 9 × elements keys.
     static constexpr i64 maxElements = i64{1} << 17;
     static constexpr usize operationsPerElement = 8;
 
-    template <typename Variant>
+    template <typename Implementation>
     static void run(benchmark::State& state) {
         const auto count = static_cast<usize>(state.range(0));
         const std::span<const u64> keys = uniform_keys(count * (operationsPerElement + 1U));
-        run_workload<Variant>(
+        run_workload<Implementation>(
             state,
             {.elements = count, .operations = count * operationsPerElement},
             [keys, count]<typename Containers>(auto&& source, auto&& checkpoint) {
@@ -60,9 +67,9 @@ struct MapChurn {
 
 } // namespace
 
-void register_churn_benchmarks() {
-    register_workload<MapChurn<true>>(AllVariants{});
-    register_workload<MapChurn<false>>(AllVariants{});
+std::vector<BenchmarkSpec> churn_benchmarks() {
+    return concat(
+        {specs_for<MapChurn<true>>(AllImplementations{}), specs_for<MapChurn<false>>(AllImplementations{})});
 }
 
 } // namespace base::bench

@@ -18,7 +18,7 @@ constexpr u64 shuffleSeed = 0xC2B2AE3D27D4EB4FULL;
 constexpr u64 lookupSeed = 0x165667B19E3779F9ULL;
 constexpr u64 stringSeed = 0x27D4EB2F165667C5ULL;
 
-// A fixed seed per (generator, count, stream), so every variant and every run sees the
+// A fixed seed per (generator, count, stream), so every implementation and every run sees the
 // same data. Only the engine's raw output is used, which the standard fixes:
 // std::uniform_int_distribution and std::shuffle differ between standard libraries and
 // would give each compiler different data.

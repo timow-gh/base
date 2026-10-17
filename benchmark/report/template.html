@@ -18,6 +18,9 @@
   --v-pmr: #b45309;
   --v-arena: #0f766e;
   --v-arena-cold: #7c3aed;
+  --v-extra-1: #be185d;
+  --v-extra-2: #1d4ed8;
+  --v-extra-3: #4d7c0f;
   --good: #15803d;
   --bad: #b91c1c;
   --warn: #a16207;
@@ -41,6 +44,9 @@
     --v-pmr: #f59e0b;
     --v-arena: #2dd4bf;
     --v-arena-cold: #a78bfa;
+    --v-extra-1: #f472b6;
+    --v-extra-2: #60a5fa;
+    --v-extra-3: #a3e635;
     --good: #4ade80;
     --bad: #f87171;
     --warn: #facc15;
@@ -62,6 +68,9 @@
   --v-pmr: #f59e0b;
   --v-arena: #2dd4bf;
   --v-arena-cold: #a78bfa;
+  --v-extra-1: #f472b6;
+  --v-extra-2: #60a5fa;
+  --v-extra-3: #a3e635;
   --good: #4ade80;
   --bad: #f87171;
   --warn: #facc15;
@@ -147,6 +156,7 @@ header.intro { display: grid; gap: 14px; }
 .tone-good { color: var(--good); }
 .tone-bad { color: var(--bad); }
 .tone-warn { color: var(--warn); }
+.muted { color: var(--muted); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 .legend-item { display: grid; grid-template-columns: 12px 1fr; gap: 2px 8px; align-items: baseline; max-width: 330px; }
@@ -179,10 +189,11 @@ td.noisy { color: var(--warn); font-weight: 600; }
 nav.jump { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.88rem; }
 nav.jump .group { color: var(--muted); font-weight: 600; }
 
+h2 .chip { vertical-align: middle; font-family: var(--font-body); }
 section.workload { display: grid; gap: 16px; padding-top: 28px; border-top: 1px solid var(--line); }
 .workload-head { display: grid; gap: 6px; }
 .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; }
-.chart { background: var(--surface); border: 1px solid var(--line); padding: 12px 14px 8px; display: grid; gap: 6px; min-width: 0; }
+.chart { margin: 0; background: var(--surface); border: 1px solid var(--line); padding: 12px 14px 8px; display: grid; gap: 6px; min-width: 0; }
 .chart-box { position: relative; height: 270px; }
 .chart-note { font-size: 0.8rem; color: var(--muted); }
 .chart-missing { color: var(--muted); font-size: 0.86rem; padding: 24px 0; }
@@ -214,8 +225,8 @@ details[open] > summary { margin-bottom: 8px; }
   function token(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
-  function variantColor(variant) {
-    return token("--v-" + variant.replace("_", "-"));
+  function implementationColor(implementation) {
+    return token(data.colorTokens[implementation] || "--muted");
   }
   function withAlpha(hex, alpha) {
     const value = parseInt(hex.slice(1), 16);
@@ -237,8 +248,8 @@ details[open] > summary { margin-bottom: 8px; }
     if (count >= 1024 && count % 1024 === 0) return count / 1024 + "Ki";
     return String(count);
   }
-  function label(variant) {
-    return data.variantLabels[variant] || variant;
+  function label(implementation) {
+    return data.labels[implementation] || implementation;
   }
 
   function sizeAxis(sizes, title) {
@@ -295,12 +306,12 @@ details[open] > summary { margin-bottom: 8px; }
 
   function timeChart(canvas, workload) {
     const datasets = [];
-    workload.variants.forEach(function (variant) {
-      const points = workload.series[variant];
-      const color = variantColor(variant);
+    workload.implementations.forEach(function (implementation) {
+      const points = workload.series[implementation];
+      const color = implementationColor(implementation);
       bandDatasets(points, "min", "max", color).forEach(function (d) { datasets.push(d); });
       datasets.push({
-        label: label(variant),
+        label: label(implementation),
         data: points.map(function (p) { return { x: p.n, y: p.median, cell: p }; }),
         borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 3, tension: 0
       });
@@ -320,12 +331,12 @@ details[open] > summary { margin-bottom: 8px; }
 
   function speedupChart(canvas, workload) {
     const datasets = [];
-    workload.variants.filter(function (v) { return v !== "std"; }).forEach(function (variant) {
-      const points = workload.series[variant].filter(function (p) { return p.speedup !== null; });
-      const color = variantColor(variant);
+    workload.implementations.filter(function (v) { return v !== data.baseline; }).forEach(function (implementation) {
+      const points = workload.series[implementation].filter(function (p) { return p.speedup !== null; });
+      const color = implementationColor(implementation);
       bandDatasets(points, "speedupLow", "speedupHigh", color).forEach(function (d) { datasets.push(d); });
       datasets.push({
-        label: label(variant),
+        label: label(implementation),
         data: points.map(function (p) { return { x: p.n, y: p.speedup, cell: p }; }),
         borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 3, tension: 0
       });
@@ -350,11 +361,11 @@ details[open] > summary { margin-bottom: 8px; }
   }
 
   function memoryChart(canvas, workload) {
-    const datasets = workload.variants.filter(function (v) { return v !== "arena_cold"; }).map(function (variant) {
-      const color = variantColor(variant);
+    const datasets = workload.implementations.filter(function (v) { return v !== "arena_cold"; }).map(function (implementation) {
+      const color = implementationColor(implementation);
       return {
-        label: label(variant),
-        data: workload.series[variant].map(function (p) { return { x: p.n, y: p.bytesPerElement, cell: p }; }),
+        label: label(implementation),
+        data: workload.series[implementation].map(function (p) { return { x: p.n, y: p.bytesPerElement, cell: p }; }),
         borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 3, tension: 0
       };
     });
@@ -373,11 +384,11 @@ details[open] > summary { margin-bottom: 8px; }
 
   function churnChart(canvas, workload) {
     const largest = workload.sizes[workload.sizes.length - 1];
-    const datasets = workload.variants.filter(function (v) { return v !== "arena_cold"; }).map(function (variant) {
-      const cell = workload.series[variant].find(function (p) { return p.n === largest; });
-      const color = variantColor(variant);
+    const datasets = workload.implementations.filter(function (v) { return v !== "arena_cold"; }).map(function (implementation) {
+      const cell = workload.series[implementation].find(function (p) { return p.n === largest; });
+      const color = implementationColor(implementation);
       return {
-        label: label(variant),
+        label: label(implementation),
         data: (cell ? cell.checkpoints : []).map(function (bytes, index) { return { x: index, y: bytes }; }),
         borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 3, tension: 0
       };
@@ -396,12 +407,12 @@ details[open] > summary { margin-bottom: 8px; }
 
   function spreadChart(canvas, workload) {
     const largest = workload.sizes[workload.sizes.length - 1];
-    const datasets = workload.variants.map(function (variant, index) {
-      const cell = workload.series[variant].find(function (p) { return p.n === largest; });
+    const datasets = workload.implementations.map(function (implementation, index) {
+      const cell = workload.series[implementation].find(function (p) { return p.n === largest; });
       const samples = cell ? cell.samples : [];
-      const color = variantColor(variant);
+      const color = implementationColor(implementation);
       return {
-        label: label(variant),
+        label: label(implementation),
         data: samples.map(function (value, i) {
           return { x: index + ((i % 7) - 3) * 0.045, y: value };
         }),
@@ -415,12 +426,12 @@ details[open] > summary { margin-bottom: 8px; }
         { x: {
             type: "linear",
             min: -0.5,
-            max: workload.variants.length - 0.5,
+            max: workload.implementations.length - 0.5,
             title: { display: true, text: "each repetition at n = " + formatCount(largest), color: token("--muted") },
             ticks: {
               color: token("--muted"),
               stepSize: 1,
-              callback: function (v) { return Number.isInteger(v) && workload.variants[v] ? label(workload.variants[v]) : ""; }
+              callback: function (v) { return Number.isInteger(v) && workload.implementations[v] ? label(workload.implementations[v]) : ""; }
             },
             grid: { color: token("--grid") },
             border: { color: token("--line") }

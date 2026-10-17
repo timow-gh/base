@@ -29,7 +29,7 @@ struct AllocationStats {
  * \brief std::allocator that records every call in an AllocationStats.
  *
  * Only for the untimed footprint pass: in the timed loop the bookkeeping would be
- * charged to std::allocator, which the arena variants do not pay.
+ * charged to std::allocator, which the arena implementations do not pay.
  */
 template <typename T>
 class CountingAllocator {
