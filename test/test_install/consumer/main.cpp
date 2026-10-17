@@ -1,3 +1,4 @@
+#include <base/containers/arena_vector.hpp>
 #include <base/memory/arena.hpp>
 
 #include <cstdio>
@@ -16,6 +17,13 @@ int main() {
         return 1;
     }
 
-    std::puts("base::memory::Arena works");
+    base::containers::ArenaVector<int> values(*arena);
+    values.assign({1, 2, 3});
+    if (values.back() != 3 || &values.get_allocator().arena() != &*arena) {
+        std::puts("ArenaVector failed");
+        return 1;
+    }
+
+    std::puts("base::memory::Arena and base::containers::ArenaVector work");
     return 0;
 }

@@ -1,9 +1,9 @@
 # Installs the SDK (component dev) into a temporary prefix and builds a separate
-# consumer project (consumer/) against it with find_package(base COMPONENTS memory).
+# consumer project (consumer/) against it with find_package(base COMPONENTS containers).
 #
 # The consumer is configured without the presets: it proves that the installed
 # package is self-contained and that requesting one component loads its
-# dependencies (core, platform) as well.
+# dependencies (core, platform, memory) as well.
 set(install_dir "${CMAKE_CURRENT_BINARY_DIR}/install_dir")
 set(consumer_dir "${CMAKE_CURRENT_BINARY_DIR}/consumer")
 set(template_dir "${CMAKE_CURRENT_LIST_DIR}/consumer")

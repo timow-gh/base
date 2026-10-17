@@ -24,7 +24,7 @@ endif ()
 
 # test_install consumes the installed SDK through find_package(COMPONENTS ...).
 option(${PROJECT_NAME}_TEST_INSTALL "Test consuming the installed ${PROJECT_NAME} package" ON)
-if (${PROJECT_NAME}_TEST_INSTALL AND ${PROJECT_NAME}_INSTALL AND "memory" IN_LIST ${PROJECT_NAME}_RESOLVED_COMPONENTS)
+if (${PROJECT_NAME}_TEST_INSTALL AND ${PROJECT_NAME}_INSTALL AND "containers" IN_LIST ${PROJECT_NAME}_RESOLVED_COMPONENTS)
     add_subdirectory(test_install)
 endif ()
 
