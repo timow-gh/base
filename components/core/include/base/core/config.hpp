@@ -74,10 +74,18 @@
 #endif
 
 // Profiling zones (base/profile/profile.hpp) are off unless requested, with the CMake
-// option base_PROFILING or by defining BASE_ENABLE_PROFILING to 1. They do not follow
-// NDEBUG, because timings of unoptimized builds are misleading.
+// option base_PROFILING=TIME or ALLOCATIONS or by defining BASE_ENABLE_PROFILING to 1.
+// They do not follow NDEBUG, because timings of unoptimized builds are misleading.
 #ifndef BASE_ENABLE_PROFILING
 #define BASE_ENABLE_PROFILING 0
+#endif
+
+// 1 with base_PROFILING=ALLOCATIONS: the zones count heap allocations instead of
+// measuring time, and base::profile_global_new replaces operator new to track them.
+// A build measures one or the other, because tracking slows every allocation down and
+// would distort the times measured next to it.
+#ifndef BASE_PROFILE_ALLOCATIONS
+#define BASE_PROFILE_ALLOCATIONS 0
 #endif
 
 // NOLINTEND(modernize-macro-to-enum, readability-use-concise-preprocessor-directives)

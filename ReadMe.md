@@ -14,17 +14,17 @@ header-only, with no third-party dependencies.
 
 ```
 core  <──  platform  <──  memory  <──  containers
-  ^
-  └──  profile
+              ^
+              └──  profile
 ```
 
 | Component | Target | Content |
 |---|---|---|
-| `core` | `base::core` | Platform/compiler detection (`config.hpp`), assertions `BASE_ASSERT(cond)` / `BASE_ASSERT_MSG(cond, msg)` with a replaceable handler and no cost when disabled (`assert.hpp`), alignment helpers (`alignment.hpp`), byte units (`units.hpp`), ASan poisoning macros (`asan.hpp`) |
-| `platform` | `base::platform` | Virtual memory: reserve, commit, decommit and release address space (Win32 and POSIX) |
-| `memory` | `base::memory` | `Arena`: a linear allocator over reserved virtual memory |
+| `core` | `base::core` | Platform/compiler detection (`config.hpp`), assertions `BASE_ASSERT(cond)` / `BASE_ASSERT_MSG(cond, msg)` with a replaceable handler and no cost when disabled (`assert.hpp`), alignment helpers (`alignment.hpp`), byte units (`units.hpp`), ASan poisoning macros (`asan.hpp`), `atomic_fetch_max` (`atomic.hpp`) |
+| `platform` | `base::platform` | Virtual memory: reserve, commit, decommit and release address space; heap allocation with any alignment and the usable size of a block (Win32 and POSIX) |
+| `memory` | `base::memory` | `Arena`: a linear allocator over reserved virtual memory, and arena statistics |
 | `containers` | `base::containers` | Header-only. STL containers that allocate from an `Arena`: `ArenaVector`, `ArenaString`, `ArenaMap`, `ArenaSet`, `ArenaUnorderedMap`, `ArenaUnorderedSet` |
-| `profile` | `base::profile` | Profiling zones `BASE_PROFILE_SCOPE` / `BASE_PROFILE_FUNCTION` / `BASE_PROFILE_BANDWIDTH`, timed with the CPU timestamp counter and compiled out unless profiling is enabled |
+| `profile` | `base::profile` | Profiling zones `BASE_PROFILE_SCOPE` / `BASE_PROFILE_FUNCTION` / `BASE_PROFILE_BANDWIDTH`, timed with the CPU timestamp counter or counting heap allocations, and compiled out unless profiling is enabled. `base::profile_global_new` replaces the global `operator new` in allocation builds to track every heap allocation |
 
 Linking a component links its dependencies too. `base::base` links every
 component that was built.
@@ -146,8 +146,8 @@ void simulate(World& world) {
 }
 ```
 
-Configure with `-Dbase_PROFILING=ON` and run the program. When it exits, the report
-of a small demo program looks like this on stdout:
+Configure with `-Dbase_PROFILING=TIME` and run the program. When it exits, the
+report of a small demo program looks like this on stdout:
 
 ```
 Total: 90.37 ms (CPU timer 3.80 GHz)
@@ -158,10 +158,12 @@ frame              50        0.02 ms   0.0%       90.37 ms 100.0%
 fib phase          50        0.01 ms   0.0%        7.15 ms   7.9%
 ```
 
-- **Enabling it.** Configure with `-Dbase_PROFILING=ON` (or a `*-release-profile`
-  preset), or define `BASE_ENABLE_PROFILING=1` yourself. It does not follow
-  `NDEBUG`: profile optimized builds, because the timings of debug builds are
-  misleading.
+- **Enabling it.** Configure with `-Dbase_PROFILING=TIME` (or a `*-release-profile`
+  preset), or define `BASE_ENABLE_PROFILING=1` yourself. `ON`, the value from
+  before the modes existed, still means `TIME`. It does not follow `NDEBUG`:
+  profile optimized builds, because the timings of debug builds are misleading.
+  `-Dbase_PROFILING=ALLOCATIONS` makes the same zones count heap allocations
+  instead, see [Allocation tracking](#allocation-tracking).
 - **Where the report goes.** To stdout by default. With
   `-Dbase_PROFILING_REPORT_DIRECTORY=profiles -Dbase_PROFILING_REPORT_NAME=game`
   it is written to `profiles/game-20261016T134512Z.txt` instead (UTC time, so
@@ -189,6 +191,78 @@ fib phase          50        0.01 ms   0.0%        7.15 ms   7.9%
   you marked, and it measures wall-clock time, including time when the OS
   pauses the thread. For "where is the time going at all?", use a sampling
   profiler.
+
+## Allocation tracking
+
+Where a program allocates is often where it loses time. base counts heap
+allocations for the whole process and per profiling zone, and counts the
+allocations and memory of its arenas.
+
+**Heap allocations** are only visible through `operator new`, so tracking them
+means replacing it, which slows every allocation down. Allocation tracking is
+therefore a profiling mode of its own, exclusive with timing: configure with
+`-Dbase_PROFILING=ALLOCATIONS` (or a `*-release-profile-allocations` preset), and
+link `base::profile_global_new` to your executable.
+
+```cmake
+target_link_libraries(my_app PRIVATE base::profile base::profile_global_new)
+```
+
+`base::profile_global_new` replaces `operator new` only in allocation builds and
+compiles to nothing in every other build, so it can stay linked: a `TIME` build
+measures times undisturbed, an `ALLOCATIONS` build counts allocations.
+
+```cpp
+#include <base/profile/heap_tracking.hpp>
+
+base::profile::reset_heap_peak();
+run_frame();
+const base::profile::HeapStats stats = base::profile::heap_stats();
+// stats.allocationCount, allocatedBytes, freedBytes, liveBytes, peakLiveBytes
+```
+
+If your program already replaces `operator new` (or uses an allocator library
+that does), leave `base::profile_global_new` out. Call
+`base::profile::record_heap_allocation(bytes)` from your `operator new` and
+`record_heap_deallocation(bytes)` with the same byte count from your
+`operator delete`, both inside `#if BASE_PROFILE_ALLOCATIONS`; everything below
+then works the same.
+
+- **Per zone.** In an allocation build the zones count the heap allocations made
+  in them instead of measuring time, and the report lists them instead of times,
+  the zone with the most allocated bytes first. They are counted like exclusive
+  time, not including nested zones, and only on the thread that runs the zones.
+  A demo that builds 2000 strings per frame:
+
+  ```
+  Allocations in zones: 121200 (17682720 bytes)
+  zone              hits      allocs     alloc bytes
+  load_names          60      121200        17682720
+  frame               60           0               0
+  count_long          60           0               0
+  ```
+
+- **Why no times.** Tracking costs every `new` and `delete` a usable-size query
+  and a few atomic operations on one cache line that every allocating thread
+  writes. Times measured next to it would be distorted, so an allocation build
+  reports none. Measure times with a `TIME` build.
+- **Byte counts** are the usable sizes of the blocks, which can be a little
+  larger than what was requested. That keeps `liveBytes` exact without a header
+  on every block. Blocks freed through the replacement that it never saw
+  allocated (on Windows, some blocks of the C++ runtime DLL) make `liveBytes`
+  too low rather than wrap around.
+- **Limits.** Allocations with `malloc()` are not seen. On Windows a
+  replacement applies only to the module (exe or DLL) it is linked into. Under
+  AddressSanitizer it takes over from ASan's `operator new`, so ASan no longer
+  reports `new[]`/`delete` mismatches.
+
+**Arenas** need no opt-in and are counted in every build, because it costs
+nothing measurable: an arena counts its allocations in a plain member, and the
+process totals change only when an arena commits. `Arena::allocation_count()`
+and `peak_used()` show how an arena is used, and `peak_used()` is the right size
+for its reservation or `ScratchConfig::initialCommit`.
+`base::memory::arena_totals()` sums the reserved and committed memory of all
+arenas of the process, including the scratch arenas.
 
 ## Building and testing
 

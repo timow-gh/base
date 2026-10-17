@@ -83,17 +83,25 @@ struct Timing {
     return anchor->exclusiveTicks;
 }
 
-// The zones with hits, at most maxReportedZones of them, keeping the most expensive.
+[[nodiscard]] u64 allocated_bytes_of(const Anchor* anchor) noexcept {
+    return anchor->allocatedBytes;
+}
+
+// What makes a zone expensive: exclusive_ticks_of() or allocated_bytes_of().
+using CostOf = u64 (*)(const Anchor*) noexcept;
+
+// The zones of one kind with hits, at most maxReportedZones of them, keeping the most
+// expensive.
 struct ReportedZones {
     std::array<const Anchor*, maxReportedZones> anchors{};
     usize count = 0;
     usize omittedCount = 0;
 };
 
-[[nodiscard]] ReportedZones collect_zones(const Anchor* firstAnchor) noexcept {
+[[nodiscard]] ReportedZones collect_zones(const Anchor* firstAnchor, ZoneKind kind, CostOf costOf) noexcept {
     ReportedZones zones;
     for (const Anchor* anchor = firstAnchor; anchor != nullptr; anchor = anchor->next) {
-        if (anchor->hitCount == 0U) {
+        if (anchor->hitCount == 0U || anchor->kind != kind) {
             continue;
         }
         if (zones.count < zones.anchors.size()) {
@@ -101,12 +109,12 @@ struct ReportedZones {
             continue;
         }
         ++zones.omittedCount;
-        const auto cheapest = std::ranges::min_element(zones.anchors, std::ranges::less{}, exclusive_ticks_of);
-        if (anchor->exclusiveTicks > (*cheapest)->exclusiveTicks) {
+        const auto cheapest = std::ranges::min_element(zones.anchors, std::ranges::less{}, costOf);
+        if (costOf(anchor) > costOf(*cheapest)) {
             *cheapest = anchor;
         }
     }
-    std::ranges::sort(std::span(zones.anchors).first(zones.count), std::ranges::greater{}, exclusive_ticks_of);
+    std::ranges::sort(std::span(zones.anchors).first(zones.count), std::ranges::greater{}, costOf);
     return zones;
 }
 
@@ -118,7 +126,7 @@ struct ReportedZones {
     return width;
 }
 
-void print_zone(std::FILE* stream, const Anchor& anchor, usize nameWidth, const Timing& timing) {
+void print_time_zone(std::FILE* stream, const Anchor& anchor, usize nameWidth, const Timing& timing) {
     std::print(stream,
                "{:<{}}  {:>10}  {:>10.2f} ms {:>5.1f}%  {:>10.2f} ms {:>5.1f}%",
                anchor.name,
@@ -132,6 +140,65 @@ void print_zone(std::FILE* stream, const Anchor& anchor, usize nameWidth, const 
         std::print(stream, "  {:>8.2f} GB/s", gigabytes_per_second(anchor, timing));
     }
     std::println(stream, "");
+}
+
+void write_time_table(std::FILE* stream, const ReportedZones& zones, const Timing& timing) {
+    const usize nameWidth = name_column_width(zones);
+    std::println(stream,
+                 "Total: {:.2f} ms (CPU timer {:.2f} GHz)",
+                 to_milliseconds(timing.totalTicks, timing),
+                 timing.ticksPerSecond / hertzPerGigahertz);
+    std::println(stream,
+                 "{:<{}}  {:>10}  {:>20}  {:>20}  {:>13}",
+                 "zone",
+                 nameWidth,
+                 "hits",
+                 "exclusive",
+                 "inclusive",
+                 "bandwidth");
+    for (usize i = 0; i < zones.count; ++i) {
+        print_time_zone(stream, *zones.anchors[i], nameWidth, timing);
+    }
+    if (zones.omittedCount > 0U) {
+        std::println(stream, "{} more zones not shown", zones.omittedCount);
+    }
+}
+
+struct AllocationTotals {
+    u64 count = 0;
+    u64 bytes = 0;
+};
+
+// Over every allocation zone, also those the table leaves out. The counts are
+// exclusive, so the sums are the allocations made inside zones, each counted once.
+[[nodiscard]] AllocationTotals allocation_totals(const Anchor* firstAnchor) noexcept {
+    AllocationTotals totals;
+    for (const Anchor* anchor = firstAnchor; anchor != nullptr; anchor = anchor->next) {
+        if (anchor->kind == ZoneKind::allocations) {
+            totals.count += anchor->allocationCount;
+            totals.bytes += anchor->allocatedBytes;
+        }
+    }
+    return totals;
+}
+
+void write_allocation_table(std::FILE* stream, const ReportedZones& zones, const AllocationTotals& totals) {
+    const usize nameWidth = name_column_width(zones);
+    std::println(stream, "Allocations in zones: {} ({} bytes)", totals.count, totals.bytes);
+    std::println(stream, "{:<{}}  {:>10}  {:>10}  {:>14}", "zone", nameWidth, "hits", "allocs", "alloc bytes");
+    for (usize i = 0; i < zones.count; ++i) {
+        const Anchor& anchor = *zones.anchors[i];
+        std::println(stream,
+                     "{:<{}}  {:>10}  {:>10}  {:>14}",
+                     anchor.name,
+                     nameWidth,
+                     anchor.hitCount,
+                     anchor.allocationCount,
+                     anchor.allocatedBytes);
+    }
+    if (zones.omittedCount > 0U) {
+        std::println(stream, "{} more zones not shown", zones.omittedCount);
+    }
 }
 
 [[nodiscard]] bool has_hits(const Anchor* firstAnchor) noexcept {
@@ -152,26 +219,16 @@ void write_report(std::FILE* stream, const Session& current) {
     timing.totalTicks = endTicks - current.startTicks;
     timing.ticksPerSecond = seconds > 0.0 ? static_cast<f64>(timing.totalTicks) / seconds : 0.0;
 
-    const ReportedZones zones = collect_zones(current.firstAnchor);
-    const usize nameWidth = name_column_width(zones);
-
-    std::println(stream,
-                 "Total: {:.2f} ms (CPU timer {:.2f} GHz)",
-                 to_milliseconds(timing.totalTicks, timing),
-                 timing.ticksPerSecond / hertzPerGigahertz);
-    std::println(stream,
-                 "{:<{}}  {:>10}  {:>20}  {:>20}  {:>13}",
-                 "zone",
-                 nameWidth,
-                 "hits",
-                 "exclusive",
-                 "inclusive",
-                 "bandwidth");
-    for (usize i = 0; i < zones.count; ++i) {
-        print_zone(stream, *zones.anchors[i], nameWidth, timing);
+    const ReportedZones timeZones = collect_zones(current.firstAnchor, ZoneKind::time, exclusive_ticks_of);
+    const ReportedZones allocationZones =
+        collect_zones(current.firstAnchor, ZoneKind::allocations, allocated_bytes_of);
+    // A build has zones of one kind only. An allocation build's report leaves the time
+    // table out, so that it shows no times distorted by the tracking.
+    if (timeZones.count > 0U || allocationZones.count == 0U) {
+        write_time_table(stream, timeZones, timing);
     }
-    if (zones.omittedCount > 0U) {
-        std::println(stream, "{} more zones not shown", zones.omittedCount);
+    if (allocationZones.count > 0U) {
+        write_allocation_table(stream, allocationZones, allocation_totals(current.firstAnchor));
     }
 }
 
@@ -264,6 +321,8 @@ void reset() noexcept {
         anchor->exclusiveTicks = 0;
         anchor->inclusiveTicks = 0;
         anchor->processedBytes = 0;
+        anchor->allocationCount = 0;
+        anchor->allocatedBytes = 0;
     }
     current.startTime = SteadyClock::now();
     current.startTicks = read_cpu_timer();
@@ -273,10 +332,13 @@ std::optional<ZoneStats> zone_stats(std::string_view name) noexcept {
     for (const Anchor* anchor = session().firstAnchor; anchor != nullptr; anchor = anchor->next) {
         if (name == anchor->name) {
             return ZoneStats{.name = anchor->name,
+                             .kind = anchor->kind,
                              .hitCount = anchor->hitCount,
                              .exclusiveTicks = anchor->exclusiveTicks,
                              .inclusiveTicks = anchor->inclusiveTicks,
-                             .processedBytes = anchor->processedBytes};
+                             .processedBytes = anchor->processedBytes,
+                             .allocationCount = anchor->allocationCount,
+                             .allocatedBytes = anchor->allocatedBytes};
         }
     }
     return std::nullopt;

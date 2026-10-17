@@ -1,7 +1,9 @@
-// Enabled regardless of base_PROFILING. Only the macros depend on the switch, so the
-// enabled and disabled test files can share one binary.
+// Time zones regardless of base_PROFILING. Only the macros depend on the switch, so the
+// time, allocation and disabled test files can share one binary.
 #undef BASE_ENABLE_PROFILING
 #define BASE_ENABLE_PROFILING 1
+#undef BASE_PROFILE_ALLOCATIONS
+#define BASE_PROFILE_ALLOCATIONS 0
 
 #include "base/core/types.hpp"
 #include "base/profile/profile.hpp"
@@ -148,6 +150,13 @@ TEST_F(ProfileTest, ReportListsTheEnteredZones) {
     EXPECT_NE(report.find("GB/s"), std::string::npos) << report;
     // Zones without hits since reset() are left out.
     EXPECT_EQ(report.find("test.recursion"), std::string::npos) << report;
+    // Without allocation zones there is no allocation table.
+    EXPECT_EQ(report.find("allocs"), std::string::npos) << report;
+}
+
+TEST_F(ProfileTest, MacrosCreateTimeZones) {
+    hit_zone();
+    EXPECT_EQ(stats_of("test.hits").kind, base::profile::ZoneKind::time);
 }
 
 TEST_F(ProfileTest, ReportKeepsTheMostExpensiveZonesWhenThereAreTooMany) {

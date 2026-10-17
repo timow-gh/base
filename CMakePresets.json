@@ -135,10 +135,19 @@
     {
       "name": "conf-msvc-release-profile",
       "displayName": "msvc Release (User Mode) + Profiling",
-      "description": "Target Windows with the msvc compiler, release build type, with profiling zones enabled",
+      "description": "Target Windows with the msvc compiler, release build type, with time profiling zones",
       "inherits": [
         "conf-msvc-release",
         "conf-profile-common"
+      ]
+    },
+    {
+      "name": "conf-msvc-release-profile-allocations",
+      "displayName": "msvc Release (User Mode) + Allocation Profiling",
+      "description": "Target Windows with the msvc compiler, release build type, with allocation profiling zones",
+      "inherits": [
+        "conf-msvc-release",
+        "conf-profile-allocations-common"
       ]
     },
     {
@@ -198,10 +207,19 @@
     {
       "name": "conf-gcc-release-profile",
       "displayName": "gcc Release + Profiling",
-      "description": "Target Unix-like OS with the gcc compiler, release build type, with profiling zones enabled",
+      "description": "Target Unix-like OS with the gcc compiler, release build type, with time profiling zones",
       "inherits": [
         "conf-gcc-release",
         "conf-profile-common"
+      ]
+    },
+    {
+      "name": "conf-gcc-release-profile-allocations",
+      "displayName": "gcc Release + Allocation Profiling",
+      "description": "Target Unix-like OS with the gcc compiler, release build type, with allocation profiling zones",
+      "inherits": [
+        "conf-gcc-release",
+        "conf-profile-allocations-common"
       ]
     },
     {
@@ -243,10 +261,19 @@
     {
       "name": "conf-clang-release-profile",
       "displayName": "clang Release + Profiling",
-      "description": "Target Unix-like OS with the clang compiler, release build type, with profiling zones enabled",
+      "description": "Target Unix-like OS with the clang compiler, release build type, with time profiling zones",
       "inherits": [
         "conf-clang-release",
         "conf-profile-common"
+      ]
+    },
+    {
+      "name": "conf-clang-release-profile-allocations",
+      "displayName": "clang Release + Allocation Profiling",
+      "description": "Target Unix-like OS with the clang compiler, release build type, with allocation profiling zones",
+      "inherits": [
+        "conf-clang-release",
+        "conf-profile-allocations-common"
       ]
     },
     {
@@ -306,10 +333,18 @@
     },
     {
       "name": "conf-profile-common",
-      "description": "Enables the BASE_PROFILE_* zones of the profile component",
+      "description": "Profiling zones that measure time",
       "hidden": true,
       "cacheVariables": {
-        "base_PROFILING": "ON"
+        "base_PROFILING": "TIME"
+      }
+    },
+    {
+      "name": "conf-profile-allocations-common",
+      "description": "Profiling zones that count heap allocations instead of measuring time",
+      "hidden": true,
+      "cacheVariables": {
+        "base_PROFILING": "ALLOCATIONS"
       }
     },
     {
@@ -537,6 +572,12 @@
       "displayName": "msvc Release + Profiling Build"
     },
     {
+      "name": "build-msvc-release-profile-allocations",
+      "inherits": "build-release",
+      "configurePreset": "conf-msvc-release-profile-allocations",
+      "displayName": "msvc Release + Allocation Profiling Build"
+    },
+    {
       "name": "build-msvc-relwithdebinfo",
       "inherits": "build-relwithdebinfo",
       "configurePreset": "conf-msvc-relwithdebinfo",
@@ -579,6 +620,12 @@
       "displayName": "gcc Release + Profiling Build"
     },
     {
+      "name": "build-gcc-release-profile-allocations",
+      "inherits": "build-release",
+      "configurePreset": "conf-gcc-release-profile-allocations",
+      "displayName": "gcc Release + Allocation Profiling Build"
+    },
+    {
       "name": "build-clang-debug",
       "inherits": "build-debug",
       "configurePreset": "conf-clang-debug",
@@ -607,6 +654,12 @@
       "inherits": "build-release",
       "configurePreset": "conf-clang-release-profile",
       "displayName": "clang Release + Profiling Build"
+    },
+    {
+      "name": "build-clang-release-profile-allocations",
+      "inherits": "build-release",
+      "configurePreset": "conf-clang-release-profile-allocations",
+      "displayName": "clang Release + Allocation Profiling Build"
     },
     {
       "name": "build-msvc-release-benchmark",
@@ -816,6 +869,16 @@
       "configurePreset": "conf-msvc-release-profile"
     },
     {
+      "name": "test-msvc-release-profile-allocations",
+      "displayName": "msvc Release + Allocation Profiling Tests",
+      "description": "Enable output and stop on failure",
+      "inherits": [
+        "test-msvc-common",
+        "test-release"
+      ],
+      "configurePreset": "conf-msvc-release-profile-allocations"
+    },
+    {
       "name": "test-msvc-relwithdebinfo",
       "displayName": "msvc RelWithDebInfo Tests",
       "description": "Enable output and stop on failure",
@@ -886,6 +949,16 @@
       "configurePreset": "conf-gcc-release-profile"
     },
     {
+      "name": "test-gcc-release-profile-allocations",
+      "displayName": "gcc Release + Allocation Profiling Tests",
+      "description": "Enable output and stop on failure",
+      "inherits": [
+        "test-unix-common",
+        "test-release"
+      ],
+      "configurePreset": "conf-gcc-release-profile-allocations"
+    },
+    {
       "name": "test-clang-debug",
       "displayName": "clang Debug Tests",
       "description": "Enable output and stop on failure",
@@ -934,6 +1007,16 @@
         "test-release"
       ],
       "configurePreset": "conf-clang-release-profile"
+    },
+    {
+      "name": "test-clang-release-profile-allocations",
+      "displayName": "clang Release + Allocation Profiling Tests",
+      "description": "Enable output and stop on failure",
+      "inherits": [
+        "test-unix-common",
+        "test-release"
+      ],
+      "configurePreset": "conf-clang-release-profile-allocations"
     },
     {
       "name": "test-gcc-debug-asan",
@@ -1125,6 +1208,25 @@
       ]
     },
     {
+      "name": "workflow-test-clang-release-profile-allocations",
+      "displayName": "Clang Release + Allocation Profiling Workflow",
+      "description": "Configure, build and test with Clang in one step",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "conf-clang-release-profile-allocations"
+        },
+        {
+          "type": "build",
+          "name": "build-clang-release-profile-allocations"
+        },
+        {
+          "type": "test",
+          "name": "test-clang-release-profile-allocations"
+        }
+      ]
+    },
+    {
       "name": "workflow-test-clang-relwithdebinfo",
       "displayName": "Clang RelWithDebInfo Workflow",
       "description": "Configure, build and test with Clang in one step",
@@ -1220,6 +1322,25 @@
       ]
     },
     {
+      "name": "workflow-test-gcc-release-profile-allocations",
+      "displayName": "GCC Release + Allocation Profiling Workflow",
+      "description": "Configure, build and test with GCC in one step",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "conf-gcc-release-profile-allocations"
+        },
+        {
+          "type": "build",
+          "name": "build-gcc-release-profile-allocations"
+        },
+        {
+          "type": "test",
+          "name": "test-gcc-release-profile-allocations"
+        }
+      ]
+    },
+    {
       "name": "workflow-test-gcc-relwithdebinfo",
       "displayName": "GCC RelWithDebInfo Workflow",
       "description": "Configure, build and test with GCC in one step",
@@ -1311,6 +1432,25 @@
         {
           "type": "test",
           "name": "test-msvc-release-profile"
+        }
+      ]
+    },
+    {
+      "name": "workflow-test-msvc-release-profile-allocations",
+      "displayName": "Windows Release + Allocation Profiling Workflow",
+      "description": "Configure, build and test on Windows in one step",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "conf-msvc-release-profile-allocations"
+        },
+        {
+          "type": "build",
+          "name": "build-msvc-release-profile-allocations"
+        },
+        {
+          "type": "test",
+          "name": "test-msvc-release-profile-allocations"
         }
       ]
     },

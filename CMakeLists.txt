@@ -65,7 +65,25 @@ option(${PROJECT_NAME}_BENCHMARKS "Build the container benchmarks (Google Benchm
 # The components are static libraries. PIC lets consumers link them into their
 # own shared libraries.
 option(${PROJECT_NAME}_POSITION_INDEPENDENT_CODE "Compile the components as position independent code" ON)
-option(${PROJECT_NAME}_PROFILING "Enable the BASE_PROFILE_* zones (defines BASE_ENABLE_PROFILING=1)" OFF)
+# TIME and ALLOCATIONS exclude each other: counting allocations slows every operator
+# new down, which would distort the times measured next to it.
+set(${PROJECT_NAME}_PROFILING OFF CACHE STRING
+        "Profiling mode: OFF, TIME (the BASE_PROFILE_* zones measure time) or ALLOCATIONS (they count heap allocations)")
+set_property(CACHE ${PROJECT_NAME}_PROFILING PROPERTY TYPE STRING)
+set_property(CACHE ${PROJECT_NAME}_PROFILING PROPERTY STRINGS OFF TIME ALLOCATIONS)
+# The option used to be a BOOL, so existing caches and command lines may still say ON.
+string(TOUPPER "${${PROJECT_NAME}_PROFILING}" profiling_value)
+set(profiling_true_values ON TRUE YES Y 1)
+set(profiling_false_values OFF FALSE NO N 0)
+if (profiling_value STREQUAL "TIME" OR profiling_value STREQUAL "ALLOCATIONS")
+    set(${PROJECT_NAME}_PROFILING_MODE ${profiling_value})
+elseif (profiling_value IN_LIST profiling_true_values)
+    set(${PROJECT_NAME}_PROFILING_MODE TIME)
+elseif (profiling_value IN_LIST profiling_false_values OR profiling_value STREQUAL "")
+    set(${PROJECT_NAME}_PROFILING_MODE OFF)
+else ()
+    message(FATAL_ERROR "${PROJECT_NAME}_PROFILING is '${${PROJECT_NAME}_PROFILING}', expected OFF, TIME or ALLOCATIONS")
+endif ()
 set(${PROJECT_NAME}_PROFILING_REPORT_DIRECTORY "" CACHE STRING
         "Directory the profiling report is written to; empty prints it to stdout (BASE_PROFILE_REPORT_DIRECTORY)")
 set(${PROJECT_NAME}_PROFILING_REPORT_NAME "profile" CACHE STRING
@@ -89,8 +107,9 @@ endif ()
 # The component graph, in dependency order. A component may only depend on
 # components declared before it.
 base_declare_component(core)
-base_declare_component(profile DEPENDS core)
 base_declare_component(platform DEPENDS core)
+# profile needs platform for the heap that its replacement of operator new allocates from.
+base_declare_component(profile DEPENDS core platform)
 base_declare_component(memory DEPENDS core platform)
 # memory must never depend on containers: allocators keep their own bookkeeping in
 # memory::detail, so the containers can be built on top of them.
