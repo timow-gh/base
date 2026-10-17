@@ -22,18 +22,6 @@ if (${PROJECT_NAME}_USE_WARNINGS)
     add_warnings_and_compile_options(${benchmark_target} "${${PROJECT_NAME}_WARNINGS_AS_ERRORS}")
 endif ()
 
-# Recorded in the results so a report names the code it measured. Taken at configure
-# time, so commits made after configuring are not reflected until the next configure.
-find_package(Git QUIET)
-set(git_commit "unknown")
-if (GIT_FOUND)
-    execute_process(
-            COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
-            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-            OUTPUT_VARIABLE git_commit
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET)
-endif ()
-target_compile_definitions(${benchmark_target} PRIVATE
-        "BASE_BENCH_GIT_COMMIT=\"${git_commit}\""
-        "BASE_BENCH_BUILD_TYPE=\"$<CONFIG>\"")
+# The commit is not compiled in: benchmark/run.py passes it with --benchmark_context at
+# run time, so it is right after every commit and marks uncommitted changes.
+target_compile_definitions(${benchmark_target} PRIVATE "BASE_BENCH_BUILD_TYPE=\"$<CONFIG>\"")

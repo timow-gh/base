@@ -322,7 +322,6 @@ void register_benchmarks(std::span<const Selection> selection) {
 
 void add_context(std::span<const Selection> selection, const Options& options) {
     benchmark::AddCustomContext("base_build_type", BASE_BENCH_BUILD_TYPE);
-    benchmark::AddCustomContext("base_commit", BASE_BENCH_GIT_COMMIT);
     benchmark::AddCustomContext("compiler", compiler_name());
     benchmark::AddCustomContext("arena_debug_checks", memory::Arena::debug_checks_enabled() ? "on" : "off");
     benchmark::AddCustomContext("asserts", BASE_ENABLE_ASSERTS ? "on" : "off");
