@@ -1,7 +1,10 @@
 #include <base/containers/arena_vector.hpp>
+#include <base/core/config.hpp>
 #include <base/memory/arena.hpp>
+#include <base/profile/heap_tracking.hpp>
 
 #include <cstdio>
+#include <new>
 #include <optional>
 
 int main() {
@@ -24,6 +27,27 @@ int main() {
         return 1;
     }
 
-    std::puts("base::memory::Arena and base::containers::ArenaVector work");
+    const base::profile::HeapStats before = base::profile::heap_stats();
+    base::profile::record_heap_allocation(16);
+    base::profile::record_heap_deallocation(16);
+    if (base::profile::heap_stats().allocationCount <= before.allocationCount) {
+        std::puts("base::profile::record_heap_allocation failed");
+        return 1;
+    }
+
+#if BASE_PROFILE_ALLOCATIONS
+    // A direct call: unlike a new-expression, the compiler may not elide it. Only
+    // the installed base::profile_global_new can make it count.
+    const base::profile::HeapStats beforeNew = base::profile::heap_stats();
+    void* block = ::operator new(sizeof(int));
+    const base::profile::HeapStats afterNew = base::profile::heap_stats();
+    ::operator delete(block);
+    if (afterNew.allocationCount <= beforeNew.allocationCount) {
+        std::puts("base::profile_global_new does not replace operator new");
+        return 1;
+    }
+#endif
+
+    std::puts("base::memory, base::containers and base::profile work");
     return 0;
 }

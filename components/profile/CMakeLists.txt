@@ -11,28 +11,39 @@ base_add_component(
 # The profiling mode (BASE_ENABLE_PROFILING, BASE_PROFILE_ALLOCATIONS) is defined on
 # base::core, see components/core/CMakeLists.txt.
 
+# PRIVATE: only source/profile.cpp reads the report output. PUBLIC would put the
+# absolute directory of the build machine into the installed package and into every
+# consumer's compile flags.
+set(report_definitions "")
 if (NOT "${${PROJECT_NAME}_PROFILING_REPORT_DIRECTORY}" STREQUAL "")
     # Forward slashes: backslashes would start escape sequences in the string literal.
     file(TO_CMAKE_PATH "${${PROJECT_NAME}_PROFILING_REPORT_DIRECTORY}" report_directory)
-    target_compile_definitions(${PROJECT_NAME}_profile PUBLIC "BASE_PROFILE_REPORT_DIRECTORY=\"${report_directory}\"")
+    list(APPEND report_definitions "BASE_PROFILE_REPORT_DIRECTORY=\"${report_directory}\"")
 endif ()
-
 if (NOT "${${PROJECT_NAME}_PROFILING_REPORT_NAME}" STREQUAL "profile")
-    target_compile_definitions(${PROJECT_NAME}_profile
-            PUBLIC "BASE_PROFILE_REPORT_NAME=\"${${PROJECT_NAME}_PROFILING_REPORT_NAME}\"")
+    list(APPEND report_definitions "BASE_PROFILE_REPORT_NAME=\"${${PROJECT_NAME}_PROFILING_REPORT_NAME}\"")
 endif ()
+target_compile_definitions(${PROJECT_NAME}_profile PRIVATE ${report_definitions})
 
-# Creates an object library that replaces the global operator new and operator delete
-# with versions that report every heap allocation to record_heap_allocation(), so that
-# heap_stats() and the allocation zones see them. `definitions` are added PRIVATE.
+# Creates the object library `target` from source/global_new.cpp. It replaces the
+# global operator new and operator delete with versions that report every heap
+# allocation to record_heap_allocation(), so that heap_stats() and the allocation
+# zones see them.
+#
+# Arguments:
+#   target          name of the object library to create (positional, required)
+#   definitions...  any further arguments: compile definitions added PRIVATE, e.g.
+#                   BASE_PROFILE_ALLOCATIONS=1 to build the tracking version in
+#                   every build mode (used by the tests)
+#
+# Example:
+#   base_add_global_new_library(base_profile_global_new_tracking BASE_PROFILE_ALLOCATIONS=1)
 function(base_add_global_new_library target)
     add_library(${target} OBJECT source/global_new.cpp)
     target_link_libraries(${target} PUBLIC ${PROJECT_NAME}::profile)
+    # ARGN holds the arguments after the named parameter `target`.
     target_compile_definitions(${target} PRIVATE ${ARGN})
-    set_target_properties(${target}
-            PROPERTIES
-            FOLDER ${PROJECT_NAME}
-            POSITION_INDEPENDENT_CODE ${${PROJECT_NAME}_POSITION_INDEPENDENT_CODE})
+    set_target_properties(${target} PROPERTIES FOLDER ${PROJECT_NAME})
     if (${PROJECT_NAME}_USE_WARNINGS)
         add_warnings_and_compile_options(${target} "${${PROJECT_NAME}_WARNINGS_AS_ERRORS}")
     endif ()
@@ -75,6 +86,8 @@ if (${PROJECT_NAME}_TESTS)
             test/profile_allocations_test.cpp
             test/profile_disabled_test.cpp
             test/profile_test.cpp)
+    # The tests check the configured report output, which base::profile keeps PRIVATE.
+    target_compile_definitions(${PROJECT_NAME}_profile_tests PRIVATE ${report_definitions})
 
     # The report output is compiled into the library, so the file output is tested
     # with a second build of it that writes reports to a fixed directory.

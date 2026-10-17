@@ -5,7 +5,7 @@ inputs:
     description: 'The cmake workflow to use.'
     required: true
   install_tools:
-    description: 'Additional tools to install (space-separated list: lcov, clang-tidy, cppcheck)'
+    description: 'Additional tools to install (space-separated list, e.g. lcov, clang-tidy)'
     required: false
     default: ''
   build_native_args:

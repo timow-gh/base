@@ -1,24 +1,37 @@
+# This template is processed twice. When base is configured, configure_package_config_file()
+# in the root CMakeLists.txt replaces every variable between two @ signs with its value in
+# base's build and writes @project_name@Config.cmake, installed to <prefix>/lib/cmake/@project_name@/.
+# It runs with @ONLY, so ${...} is left alone: those are evaluated later, when a consumer's
+# find_package(@project_name@) includes the installed file. Never write a variable name
+# between two @ signs in a comment here; it is substituted like code (an undefined one
+# becomes empty).
+#
+# The line below expands to PACKAGE_PREFIX_DIR, set_and_check() and the
+# check_required_components() macro called at the end of this file.
 @PACKAGE_INIT@
-
-# Configure imported target configuration mapping for Windows multi-config builds
-# Allows Release and RelWithDebInfo to be used instead of Debug as fallback
-# See https://gitlab.kitware.com/cmake/cmake/issues/20319
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel RelWithDebInfo Release Debug "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel Debug "")
-set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel Debug "")
 
 # No find_dependency() calls: @project_name@ has no third-party dependencies.
 
-# Installed components, in dependency order.
+# Installed components, in dependency order: the order of the base_declare_component()
+# calls, which only allow a component to depend on components declared before it.
 set(@project_name@_INSTALLED_COMPONENTS "@installed_components@")
 
-# find_package(@project_name@) without COMPONENTS loads everything that is installed.
+# find_package() is not a function: a config file runs in the scope of its caller, so
+# every variable set here leaks into the consumer's CMakeLists.txt. The helpers are
+# prefixed with _@project_name@_ to avoid clashes and are unset at the end.
+#
+# find_package(@project_name@ COMPONENTS a b) sets @project_name@_FIND_COMPONENTS to a;b
+# (and @project_name@_FIND_REQUIRED_<name> for each); without COMPONENTS it loads
+# everything that is installed.
 set(_@project_name@_requested ${@project_name@_FIND_COMPONENTS})
 if (NOT _@project_name@_requested)
     set(_@project_name@_requested ${@project_name@_INSTALLED_COMPONENTS})
 endif ()
 
-# Collect the requested components and their transitive dependencies.
+# Collect the requested components and their transitive dependencies, like
+# base_resolve_components() does in the build. The graph comes from the installed
+# @project_name@_<name>Dependencies.cmake files, written by base_add_component(), so
+# this file never repeats it. A worklist instead of recursion: CMake has no return values.
 set(_@project_name@_load "")
 set(_@project_name@_pending ${_@project_name@_requested})
 while (_@project_name@_pending)
@@ -26,30 +39,55 @@ while (_@project_name@_pending)
     if (_@project_name@_component IN_LIST _@project_name@_load)
         continue()
     endif ()
+    # Not a FATAL_ERROR: the component may have been requested with
+    # OPTIONAL_COMPONENTS. check_required_components() fails the find_package() call
+    # only for a required one, and CMake shows the message only then.
     if (NOT _@project_name@_component IN_LIST @project_name@_INSTALLED_COMPONENTS)
         set(@project_name@_${_@project_name@_component}_FOUND FALSE)
         set(@project_name@_NOT_FOUND_MESSAGE
                 "Component '${_@project_name@_component}' is not part of this installation (installed: ${@project_name@_INSTALLED_COMPONENTS})")
         continue()
     endif ()
+    # CMAKE_CURRENT_LIST_DIR is the directory of the installed config file, which holds
+    # the files of all components, so the installation can be moved to another prefix.
+    # The included file sets @project_name@_<name>_DEPENDS, e.g. "core;platform".
     include("${CMAKE_CURRENT_LIST_DIR}/@project_name@_${_@project_name@_component}Dependencies.cmake")
     list(APPEND _@project_name@_load ${_@project_name@_component})
     list(APPEND _@project_name@_pending ${@project_name@_${_@project_name@_component}_DEPENDS})
 endwhile ()
 
 # Load the target files in dependency order: each one checks that the targets it
-# references from other components already exist.
+# references from other components already exist. The worklist above is in request
+# order, so iterate over the installed components instead and skip the unneeded ones.
 foreach (_@project_name@_component IN LISTS @project_name@_INSTALLED_COMPONENTS)
     if (_@project_name@_component IN_LIST _@project_name@_load)
+        # Imported by an earlier find_package() call in this directory or a parent one.
         if (NOT TARGET @project_name@::${_@project_name@_component})
-            include("${CMAKE_CURRENT_LIST_DIR}/@project_name@_${_@project_name@_component}Targets.cmake")
+            # A config file runs in the scope of the find_package() call, so the
+            # mappings are set inside a block: they reach only the targets created
+            # here, not the caller's own imported targets. They make a release-like
+            # build prefer a release-like installed configuration over Debug when
+            # its own is not installed (https://gitlab.kitware.com/cmake/cmake/issues/20319).
+            # The targets file reports missing files through the two propagated variables.
+            block(SCOPE_FOR VARIABLES PROPAGATE @project_name@_FOUND @project_name@_NOT_FOUND_MESSAGE)
+                set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel RelWithDebInfo Release Debug "")
+                set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel Debug "")
+                set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel Debug "")
+                # Generated by install(EXPORT) in base_add_component(): creates the
+                # imported target and includes the per-configuration files next to it
+                # (...Targets-debug.cmake, ...Targets-release.cmake) with the library paths.
+                include("${CMAKE_CURRENT_LIST_DIR}/@project_name@_${_@project_name@_component}Targets.cmake")
+            endblock()
         endif ()
+        # Read by check_required_components().
         set(@project_name@_${_@project_name@_component}_FOUND TRUE)
     endif ()
 endforeach ()
 
-# The umbrella target only exists when everything was loaded, so it never
-# silently means "whatever an earlier find_package() call happened to load".
+# Only a call without COMPONENTS creates the umbrella target, and such a call loads
+# every installed component, so the umbrella is complete whichever call runs first.
+# Created by a call with COMPONENTS, it would hold just the requested components, and
+# a later call without COMPONENTS could not complete it: the target would already exist.
 if (NOT @project_name@_FIND_COMPONENTS AND NOT TARGET @project_name@::@project_name@)
     add_library(@project_name@::@project_name@ INTERFACE IMPORTED)
     foreach (_@project_name@_component IN LISTS _@project_name@_load)
@@ -62,4 +100,7 @@ unset(_@project_name@_load)
 unset(_@project_name@_pending)
 unset(_@project_name@_component)
 
+# Sets @project_name@_FOUND to FALSE if a required component has no
+# @project_name@_<name>_FOUND set to TRUE. find_package() then fails (REQUIRED) or
+# returns with @project_name@_FOUND false.
 check_required_components(@project_name@)

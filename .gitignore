@@ -36,9 +36,6 @@ $RECYCLE.BIN/
 ehthumbs.db
 Thumbs.db
 /CPMSourceVariable.cmake
-/Doxyfile
-/cmake/Doxyfile
-/doc/
 
 # Python bytecode of the benchmark scripts
 __pycache__/

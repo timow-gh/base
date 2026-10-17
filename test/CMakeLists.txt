@@ -22,15 +22,14 @@ if (MSVC AND CMAKE_MSVC_RUNTIME_LIBRARY)
     list(APPEND consumer_toolchain_args "-DCMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
 endif ()
 
-# test_install consumes the installed SDK through find_package(COMPONENTS ...).
-option(${PROJECT_NAME}_TEST_INSTALL "Test consuming the installed ${PROJECT_NAME} package" ON)
-if (${PROJECT_NAME}_TEST_INSTALL AND ${PROJECT_NAME}_INSTALL AND "containers" IN_LIST ${PROJECT_NAME}_RESOLVED_COMPONENTS)
+# test_install consumes the installed SDK through find_package(COMPONENTS ...); its
+# consumer uses containers and profile.
+if (${PROJECT_NAME}_INSTALL
+        AND "containers" IN_LIST ${PROJECT_NAME}_RESOLVED_COMPONENTS
+        AND "profile" IN_LIST ${PROJECT_NAME}_RESOLVED_COMPONENTS)
     add_subdirectory(test_install)
 endif ()
 
 # test_subdirectory consumes the source tree with add_subdirectory() and builds
 # only the requested components.
-option(${PROJECT_NAME}_TEST_SUBDIRECTORY "Test consuming ${PROJECT_NAME} with add_subdirectory()" ON)
-if (${PROJECT_NAME}_TEST_SUBDIRECTORY)
-    add_subdirectory(test_subdirectory)
-endif ()
+add_subdirectory(test_subdirectory)

@@ -1,8 +1,9 @@
 # Installs the SDK (component dev) into a temporary prefix and builds a separate
-# consumer project (consumer/) against it with find_package(base COMPONENTS containers).
+# consumer project (consumer/) against it with
+# find_package(base COMPONENTS containers profile).
 #
 # The consumer is configured without the presets: it proves that the installed
-# package is self-contained and that requesting one component loads its
+# package is self-contained and that requesting components loads their
 # dependencies (core, platform, memory) as well.
 set(install_dir "${CMAKE_CURRENT_BINARY_DIR}/install_dir")
 set(consumer_dir "${CMAKE_CURRENT_BINARY_DIR}/consumer")
@@ -16,7 +17,6 @@ set(consumer_configure_args
         "-DCMAKE_PREFIX_PATH=${install_dir}")
 
 add_custom_target(test_install
-        DEPENDS ${PROJECT_NAME}_memory
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${install_dir}"
         COMMAND ${CMAKE_COMMAND} --install "${PROJECT_BINARY_DIR}" --config $<CONFIG> --prefix "${install_dir}" --component dev
 
@@ -30,6 +30,15 @@ add_custom_target(test_install
         COMMAND ${CMAKE_COMMAND} -E echo "Installation test PASSED: Executable ran successfully"
         VERBATIM
 )
+
+# The install step copies every installed target, so all of them must be built first,
+# also when test_install is the only target requested.
+foreach (component IN LISTS ${PROJECT_NAME}_RESOLVED_COMPONENTS)
+    add_dependencies(test_install ${PROJECT_NAME}_${component})
+endforeach ()
+if (TARGET ${PROJECT_NAME}_profile_global_new)
+    add_dependencies(test_install ${PROJECT_NAME}_profile_global_new)
+endif ()
 
 add_custom_target(test_install_clean
         COMMAND ${CMAKE_COMMAND} -E rm -rf "${install_dir}" "${consumer_dir}"

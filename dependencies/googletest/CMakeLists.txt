@@ -1,10 +1,8 @@
 # googletest is a test-only dependency: it is never installed (INSTALL_GTEST OFF)
-# and never shipped, so it must not inherit the project's BUILD_SHARED_LIBS. Build
-# it static regardless. On Windows the MSVC presets force the static CRT
-# (CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded[Debug], see the root CMakeLists.txt),
-# so gtest_force_shared_crt stays OFF to match. Building gtest as DLLs against the
-# static CRT gives each module its own CRT global state, which deadlocks gtest at
-# startup on the shared Windows CI build (BUILD_SHARED_LIBS=ON) and hangs the test.
+# and never shipped, so it is built static even if the caller sets BUILD_SHARED_LIBS.
+# gtest_force_shared_crt OFF is its default. Its rewrite of /MD to /MT has no effect
+# under policy CMP0091 (the CRT comes from CMAKE_MSVC_RUNTIME_LIBRARY, not from the
+# flags), so gtest uses the same CRT as base and the tests.
 CPMAddPackage(
         NAME googletest
         GITHUB_REPOSITORY google/googletest

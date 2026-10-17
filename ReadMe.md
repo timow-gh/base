@@ -40,17 +40,19 @@ CPMAddPackage(NAME base GITHUB_REPOSITORY timow-gh/base GIT_TAG v0.1.0
 target_link_libraries(my_app PRIVATE base::memory)
 ```
 
-`base_COMPONENTS` is a list of components to build. Its default is all of them.
+`base_COMPONENTS` is a list of components to build. Empty, the default, builds all of them.
 An unknown name is a configure error.
 
 **Installed SDK**, from a release archive or `cmake --install`:
 
 ```cmake
-find_package(base 0 CONFIG REQUIRED COMPONENTS memory)   # -DCMAKE_PREFIX_PATH=<sdk>
+find_package(base 0.1 CONFIG REQUIRED COMPONENTS memory)   # -DCMAKE_PREFIX_PATH=<sdk>
 target_link_libraries(my_app PRIVATE base::memory)
 ```
 
-`find_package()` loads only the requested components and their dependencies.
+Until 1.0 a version request is satisfied only by the same minor version, because
+minor versions may break the API. `find_package()` loads only the requested
+components and their dependencies.
 Without `COMPONENTS` it loads everything and also defines `base::base`. On Windows
 the SDK contains both Debug (`base_cored.lib`, ...) and Release libraries, because
 MSVC cannot link a Debug program against Release libraries.
@@ -159,8 +161,7 @@ fib phase          50        0.01 ms   0.0%        7.15 ms   7.9%
 ```
 
 - **Enabling it.** Configure with `-Dbase_PROFILING=TIME` (or a `*-release-profile`
-  preset), or define `BASE_ENABLE_PROFILING=1` yourself. `ON`, the value from
-  before the modes existed, still means `TIME`. It does not follow `NDEBUG`:
+  preset), or define `BASE_ENABLE_PROFILING=1` yourself. It does not follow `NDEBUG`:
   profile optimized builds, because the timings of debug builds are misleading.
   `-Dbase_PROFILING=ALLOCATIONS` makes the same zones count heap allocations
   instead, see [Allocation tracking](#allocation-tracking).
@@ -288,22 +289,23 @@ The tests:
 | Test | What it checks |
 |---|---|
 | `base.<component>` | The unit tests of each component (GoogleTest), in `components/<name>/test/` |
-| `TestbaseInstall` | Installs the SDK and builds `test/test_install/consumer/` with `find_package(base COMPONENTS containers)` |
-| `TestbaseSubdirectory*` | Builds `test/test_subdirectory/consumer/` with `add_subdirectory()` and `base_COMPONENTS=core`, and fails if other components are created |
+| `TestbaseInstall` | Installs the SDK and builds `test/test_install/consumer/` with `find_package(base COMPONENTS containers profile)` |
+| `TestbaseSubdirectory*` | Builds `test/test_subdirectory/consumer/` with `add_subdirectory()` and `base_COMPONENTS=core`, and fails if other components are built |
 
-Options (the defaults in brackets apply when base is the top-level project; as a subproject everything except PIC is OFF):
+Options (the defaults in brackets apply when base is the top-level project; as a subproject they are all OFF):
 
 | Option | Meaning |
 |---|---|
-| `base_COMPONENTS` | Components to build [all] |
-| `base_TESTS` | Build the tests [ON] |
-| `base_TEST_INSTALL`, `base_TEST_SUBDIRECTORY` | Register the consumer tests [ON] |
+| `base_COMPONENTS` | Components to build; empty builds all of them [empty] |
+| `base_TESTS` | Build the unit tests and the consumer tests [ON] |
 | `base_INSTALL` | Generate install rules [ON] |
-| `base_POSITION_INDEPENDENT_CODE` | Compile the static libraries as PIC, so they can be linked into shared libraries [ON] |
 | `base_USE_WARNINGS`, `base_WARNINGS_AS_ERRORS` | Compiler warnings, as errors [ON] |
 | `base_STATIC_ANALYSIS` | clang-tidy (Clang) / MSVC code analysis [ON] |
-| `base_USE_SCCACHE`, `base_USE_CPPCHECK`, `base_BUILD_DOCUMENTATION` | Optional tooling [OFF] |
 | `base_BENCHMARKS` | Build the container benchmarks; `benchmark/run.py` configures this for you [OFF] |
+| `base_PROFILING` | `OFF`, `TIME` or `ALLOCATIONS`, see [Profiling](#profiling) [OFF] |
+
+The components are compiled as position-independent code unless the build sets
+`CMAKE_POSITION_INDEPENDENT_CODE` itself.
 
 ## Benchmarks
 
@@ -342,8 +344,9 @@ the installed package.
 ## Design decisions
 
 - **Static only.** The components are small and low-level, and allocators should
-  not cross DLL boundaries. Because they are compiled as PIC, consumers can
-  still link them into their own shared libraries. Header-only components
+  not cross DLL boundaries. Because they are compiled as PIC (by default, see
+  `CMAKE_POSITION_INDEPENDENT_CODE`), consumers can still link them into their own
+  shared libraries, which Linux requires. Header-only components
   have nothing to compile and are interface libraries.
 - **No third-party dependencies.** Not even through the arena: assertion messages
   are formatted on the stack.
