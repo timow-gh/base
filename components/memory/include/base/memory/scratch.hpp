@@ -1,8 +1,8 @@
 #pragma once
 
+#include "base/core/types.hpp"
 #include "base/memory/arena.hpp"
 
-#include <cstddef>
 #include <initializer_list>
 
 namespace base::memory {
@@ -14,7 +14,7 @@ struct ScratchConfig {
     // Reservation and commit step of each scratch arena.
     ArenaConfig arena;
     // Bytes committed up front in each scratch arena, see Arena::commit_at_least().
-    std::size_t initialCommit = 0;
+    usize initialCommit = 0;
     Prefault prefault = Prefault::No;
 };
 

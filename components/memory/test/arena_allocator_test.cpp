@@ -1,3 +1,4 @@
+#include "base/core/types.hpp"
 #include "base/memory/arena_allocator.hpp"
 #include "base/memory/arena_containers.hpp"
 #include "base/memory/scratch.hpp"
@@ -6,7 +7,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cstddef>
 #include <limits>
 #include <list>
 #include <new>
@@ -23,10 +23,11 @@ using base::memory::ArenaUnorderedMap;
 using base::memory::ArenaUnorderedSet;
 using base::memory::ArenaVector;
 using base::memory::ScratchArena;
+using namespace base::types;
 
 namespace {
 
-[[nodiscard]] Arena make_arena(std::size_t reserveSize = base::mib(64)) {
+[[nodiscard]] Arena make_arena(usize reserveSize = base::mib(64)) {
     std::optional<Arena> arena = Arena::create(reserveSize);
     if (!arena) {
         throw std::runtime_error("Arena::create failed");
@@ -60,7 +61,7 @@ TEST(ArenaAllocator, VectorGrowsInsideTheArena) {
 
     EXPECT_GE(arena.used(), count * sizeof(int));
     for (int i = 0; i < count; ++i) {
-        ASSERT_EQ(values[static_cast<std::size_t>(i)], i);
+        ASSERT_EQ(values[static_cast<usize>(i)], i);
     }
 }
 
@@ -110,7 +111,7 @@ TEST(ArenaAllocator, AllocatorsAreEqualForTheSameArenaAcrossTypes) {
     Arena first = make_arena();
     Arena second = make_arena();
     const ArenaAllocator<int> ints(first);
-    const ArenaAllocator<double> doubles(ints);
+    const ArenaAllocator<f64> doubles(ints);
 
     EXPECT_TRUE(ints == doubles);
     EXPECT_EQ(&doubles.arena(), &first);
@@ -157,7 +158,7 @@ TEST(ArenaAllocator, AssignmentBetweenArenasKeepsTheDestinationsArena) {
 }
 
 TEST(ArenaAllocator, ExhaustedArenaThrowsBadAlloc) {
-    const std::size_t granularity = base::platform::allocation_granularity();
+    const usize granularity = base::platform::allocation_granularity();
     Arena arena = make_arena(granularity);
     ArenaVector<int> values(arena);
     EXPECT_THROW(values.reserve(granularity), std::bad_alloc);
@@ -165,9 +166,8 @@ TEST(ArenaAllocator, ExhaustedArenaThrowsBadAlloc) {
 
 TEST(ArenaAllocator, OverflowingCountThrowsBadArrayNewLength) {
     Arena arena = make_arena();
-    ArenaAllocator<std::uint64_t> allocator(arena);
-    EXPECT_THROW(static_cast<void>(allocator.allocate(std::numeric_limits<std::size_t>::max())),
-                 std::bad_array_new_length);
+    ArenaAllocator<u64> allocator(arena);
+    EXPECT_THROW(static_cast<void>(allocator.allocate(std::numeric_limits<usize>::max())), std::bad_array_new_length);
     EXPECT_EQ(arena.used(), 0U);
 }
 
@@ -195,7 +195,7 @@ TEST(ArenaAllocator, NestedContainersShareTheArena) {
 }
 
 TEST(ArenaAllocator, ContainerInAScratchArenaIsFreedWithIt) {
-    std::size_t usedBefore = 0;
+    usize usedBefore = 0;
     const Arena* scratchArena = nullptr;
     {
         const ScratchArena scratch;

@@ -2,6 +2,7 @@
 
 #include "base/core/asan.hpp"
 #include "base/core/assert.hpp"
+#include "base/core/types.hpp"
 
 #include <gtest/gtest.h>
 
@@ -14,6 +15,7 @@
 using base::memory::Arena;
 using base::memory::arenaFreedByte;
 using base::memory::arenaUninitializedByte;
+using namespace base::types;
 
 namespace {
 
@@ -32,7 +34,7 @@ void recording_handler(std::string_view /*expression*/,
     recorded().messages.emplace_back(message);
 }
 
-[[nodiscard]] bool all_bytes_equal(const std::byte* first, std::size_t count, std::byte expected) {
+[[nodiscard]] bool all_bytes_equal(const std::byte* first, usize count, std::byte expected) {
     return std::all_of(first, first + count, [expected](std::byte value) { return value == expected; });
 }
 

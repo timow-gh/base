@@ -1,8 +1,9 @@
 #include "base/memory/scratch.hpp"
 
+#include "base/core/types.hpp"
+
 #include <gtest/gtest.h>
 
-#include <cstddef>
 #include <limits>
 #include <thread>
 
@@ -10,6 +11,7 @@ using base::memory::Arena;
 using base::memory::ArenaConfig;
 using base::memory::ScratchConfig;
 using base::memory::ScratchArena;
+using namespace base::types;
 
 namespace {
 
@@ -28,7 +30,7 @@ void run_in_new_thread(Function function) {
 } // namespace
 
 TEST(ScratchArena, RewindsWhenDestroyed) {
-    std::size_t usedBefore = 0;
+    usize usedBefore = 0;
     {
         const ScratchArena scratch;
         usedBefore = scratch.arena().used();
@@ -55,7 +57,7 @@ TEST(ScratchArena, AConflictSelectsTheOtherArena) {
 TEST(ScratchArena, NestedOnTheSameArenaRewindInStackOrder) {
     const ScratchArena outer;
     ASSERT_NE(outer.arena().allocate(64, 8), nullptr);
-    const std::size_t usedByOuter = outer.arena().used();
+    const usize usedByOuter = outer.arena().used();
     {
         const ScratchArena inner;
         ASSERT_EQ(&inner.arena(), &outer.arena());
@@ -75,7 +77,7 @@ TEST(ScratchArena, AResultInTheCallersScratchArenaSurvivesTheCalleesScratchArena
         return resultArena.push<int>(42);
     };
 
-    const std::size_t usedBefore = output.used();
+    const usize usedBefore = output.used();
     const int* result = produce(output);
     ASSERT_NE(result, nullptr);
     EXPECT_EQ(*result, 42);
@@ -119,7 +121,7 @@ TEST(ScratchArena, PrepareCreatesBothArenasWithTheConfigAndCommits) {
 TEST(ScratchArena, PrepareAfterFirstUseOnlyCommits) {
     run_in_new_thread([] {
         const Arena* existing = scratch_arena_of_new_scope();
-        const std::size_t reserved = existing->reserved();
+        const usize reserved = existing->reserved();
 
         const ScratchConfig config{.arena = ArenaConfig{base::mib(256), base::kib(64)}, .initialCommit = base::mib(1)};
         ASSERT_TRUE(base::memory::prepare_scratch_arenas(config));
@@ -130,7 +132,7 @@ TEST(ScratchArena, PrepareAfterFirstUseOnlyCommits) {
 
 TEST(ScratchArena, PrepareReportsAFailedReservation) {
     run_in_new_thread([] {
-        const ScratchConfig config{.arena = ArenaConfig{std::numeric_limits<std::size_t>::max() / 2U, base::kib(64)}};
+        const ScratchConfig config{.arena = ArenaConfig{std::numeric_limits<usize>::max() / 2U, base::kib(64)}};
         EXPECT_FALSE(base::memory::prepare_scratch_arenas(config));
     });
 }

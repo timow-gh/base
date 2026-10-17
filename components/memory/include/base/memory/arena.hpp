@@ -1,11 +1,11 @@
 #pragma once
 
 #include "base/core/assert.hpp"
+#include "base/core/types.hpp"
 #include "base/core/units.hpp"
 
 #include <concepts>
 #include <cstddef>
-#include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -41,9 +41,9 @@ inline constexpr std::byte arenaFreedByte{0xDD};
 // that limit address space (ulimit -v, Valgrind), should state their size, see
 // arena_bytes_for(). 64 KiB commit steps balance the number of commit calls against
 // committed-but-unused memory.
-static_assert(sizeof(void*) >= sizeof(std::uint64_t), "the default arena reservation assumes a 64-bit address space");
-inline constexpr std::size_t defaultArenaReserveSize = gib(64);
-inline constexpr std::size_t defaultArenaCommitSize = kib(64);
+static_assert(sizeof(void*) >= sizeof(u64), "the default arena reservation assumes a 64-bit address space");
+inline constexpr usize defaultArenaReserveSize = gib(64);
+inline constexpr usize defaultArenaCommitSize = kib(64);
 
 /**
  * \brief Bytes an arena must hold for `count` objects of T, pushed with one
@@ -53,18 +53,18 @@ inline constexpr std::size_t defaultArenaCommitSize = kib(64);
  * Consecutive Ts need no padding between them because sizeof(T) is a multiple of
  * alignof(T), so the results of several calls add up to a safe total:
  * \code
- * constexpr std::size_t meshArenaSize = arena_bytes_for<Vertex>(10'000) + arena_bytes_for<Index>(30'000);
+ * constexpr usize meshArenaSize = arena_bytes_for<Vertex>(10'000) + arena_bytes_for<Index>(30'000);
  * std::optional<Arena> arena = Arena::create(meshArenaSize);
  * \endcode
  */
 template <typename T>
-[[nodiscard]] constexpr std::size_t arena_bytes_for(std::size_t count = 1) noexcept {
-    constexpr std::size_t maxPadding = alignof(T) - 1U;
+[[nodiscard]] constexpr usize arena_bytes_for(usize count = 1) noexcept {
+    constexpr usize maxPadding = alignof(T) - 1U;
     if (count == 0U) {
         return 0U;
     }
-    BASE_ASSERT_MSG(count <= (std::numeric_limits<std::size_t>::max() - maxPadding) / sizeof(T),
-                    "arena size overflows std::size_t");
+    BASE_ASSERT_MSG(count <= (std::numeric_limits<usize>::max() - maxPadding) / sizeof(T),
+                    "arena size overflows usize");
     return (count * sizeof(T)) + maxPadding;
 }
 
@@ -74,9 +74,9 @@ template <typename T>
 struct ArenaConfig {
     // Address space only; physical memory is committed in `commitSize` steps as the
     // arena grows. Rounded up to the allocation granularity.
-    std::size_t reserveSize = defaultArenaReserveSize;
+    usize reserveSize = defaultArenaReserveSize;
     // Rounded up to a multiple of the page size. Larger steps mean fewer commit calls.
-    std::size_t commitSize = defaultArenaCommitSize;
+    usize commitSize = defaultArenaCommitSize;
 };
 
 /**
@@ -90,7 +90,7 @@ struct ArenaConfig {
  * into RAM that may never be used. Worth it for latency-critical code with a known
  * peak, e.g. a frame loop or a benchmark.
  */
-enum class Prefault : std::uint8_t {
+enum class Prefault : u8 {
     No,  // Commit only; each page is mapped on its first write.
     Yes, // Also write to every page now, so no page faults occur later.
 };
@@ -120,7 +120,7 @@ public:
      * \brief A position in an arena, see mark_position() and rewind_to().
      */
     struct Marker {
-        std::size_t offset = 0;
+        usize offset = 0;
     };
 
     /**
@@ -138,7 +138,7 @@ public:
      * \brief Like create(const ArenaConfig&) with the default commit size, e.g.
      * `Arena::create(mib(64))` or `Arena::create(arena_bytes_for<Particle>(1000))`.
      */
-    [[nodiscard]] static std::optional<Arena> create(std::size_t reserveSize) noexcept;
+    [[nodiscard]] static std::optional<Arena> create(usize reserveSize) noexcept;
 
     Arena(const Arena&) = delete;
     Arena& operator=(const Arena&) = delete;
@@ -151,13 +151,13 @@ public:
      * \param alignment A power of two, at most the page size.
      * \return nullptr when the reservation or the system's memory is exhausted.
      */
-    [[nodiscard]] void* allocate(std::size_t size, std::size_t alignment) noexcept;
+    [[nodiscard]] void* allocate(usize size, usize alignment) noexcept;
 
     /**
      * \brief Like allocate(), but the bytes are zero. Memory that was never handed out
      * is zero already, so only reused bytes are cleared.
      */
-    [[nodiscard]] void* allocate_zeroed(std::size_t size, std::size_t alignment) noexcept;
+    [[nodiscard]] void* allocate_zeroed(usize size, usize alignment) noexcept;
 
     /**
      * \brief Grows the block at `memory` from `oldSize` to `newSize` bytes without moving it.
@@ -170,7 +170,7 @@ public:
      * \param newSize At least `oldSize`.
      * \return false, leaving the arena unchanged, if the block cannot grow in place.
      */
-    [[nodiscard]] bool try_grow(void* memory, std::size_t oldSize, std::size_t newSize) noexcept;
+    [[nodiscard]] bool try_grow(void* memory, usize oldSize, usize newSize) noexcept;
 
     /**
      * \brief Grows the block at `memory` in place if possible (see try_grow()), otherwise
@@ -186,7 +186,7 @@ public:
      * \param alignment The alignment `memory` was allocated with.
      * \return nullptr, leaving the old block intact, when the arena is exhausted.
      */
-    [[nodiscard]] void* reallocate(void* memory, std::size_t oldSize, std::size_t newSize, std::size_t alignment) noexcept;
+    [[nodiscard]] void* reallocate(void* memory, usize oldSize, usize newSize, usize alignment) noexcept;
 
     /**
      * \brief Commits the first `size` bytes of the arena now, so that allocations up to
@@ -200,7 +200,7 @@ public:
      * \return false, leaving the arena unchanged, if `size` exceeds the reservation or
      * the system cannot commit the memory.
      */
-    [[nodiscard]] bool commit_at_least(std::size_t size, Prefault prefault = Prefault::No) noexcept;
+    [[nodiscard]] bool commit_at_least(usize size, Prefault prefault = Prefault::No) noexcept;
 
     /**
      * \brief Constructs a T from `args`. It is never destroyed.
@@ -222,8 +222,8 @@ public:
      */
     template <TriviallyDestructible T>
         requires std::default_initializable<T>
-    [[nodiscard]] std::span<T> push_array(std::size_t count) noexcept(std::is_nothrow_default_constructible_v<T>) {
-        if (count == 0U || count > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+    [[nodiscard]] std::span<T> push_array(usize count) noexcept(std::is_nothrow_default_constructible_v<T>) {
+        if (count == 0U || count > std::numeric_limits<usize>::max() / sizeof(T)) {
             return {};
         }
         void* memory = allocate(count * sizeof(T), alignof(T));
@@ -257,13 +257,13 @@ public:
     void reset() noexcept { rewind_to(Marker{}); }
 
     /** \brief Bytes handed out, including alignment padding. */
-    [[nodiscard]] std::size_t used() const noexcept { return m_offset; }
+    [[nodiscard]] usize used() const noexcept { return m_offset; }
 
     /** \brief Bytes backed by physical memory. Never shrinks. */
-    [[nodiscard]] std::size_t committed() const noexcept { return m_committed; }
+    [[nodiscard]] usize committed() const noexcept { return m_committed; }
 
     /** \brief Bytes of reserved address space, the hard capacity of the arena. */
-    [[nodiscard]] std::size_t reserved() const noexcept { return m_reserved; }
+    [[nodiscard]] usize reserved() const noexcept { return m_reserved; }
 
     /**
      * \brief True if the library was built with the debug fill patterns and the
@@ -272,32 +272,32 @@ public:
     [[nodiscard]] static bool debug_checks_enabled() noexcept;
 
 private:
-    enum class Fill : std::uint8_t {
+    enum class Fill : u8 {
         Uninitialized,
         Zeroed,
     };
 
-    static constexpr std::size_t noLastAllocation = std::numeric_limits<std::size_t>::max();
+    static constexpr usize noLastAllocation = std::numeric_limits<usize>::max();
 
-    Arena(std::byte* base, std::size_t reserved, std::size_t commitStep) noexcept;
+    Arena(std::byte* base, usize reserved, usize commitStep) noexcept;
 
-    [[nodiscard]] void* allocate_impl(std::size_t size, std::size_t alignment, Fill fill) noexcept;
+    [[nodiscard]] void* allocate_impl(usize size, usize alignment, Fill fill) noexcept;
     // Moves the position to `end` and hands out [begin, end); [m_offset, begin) is padding.
-    [[nodiscard]] bool hand_out(std::size_t begin, std::size_t end, Fill fill) noexcept;
-    [[nodiscard]] bool commit_up_to(std::size_t end) noexcept;
-    void touch_pages(std::size_t begin, std::size_t end) noexcept;
+    [[nodiscard]] bool hand_out(usize begin, usize end, Fill fill) noexcept;
+    [[nodiscard]] bool commit_up_to(usize end) noexcept;
+    void touch_pages(usize begin, usize end) noexcept;
     void release_reservation() noexcept;
 
     std::byte* m_base = nullptr;
-    std::size_t m_reserved = 0;
-    std::size_t m_committed = 0;
-    std::size_t m_commitStep = 0;
-    std::size_t m_offset = 0;
+    usize m_reserved = 0;
+    usize m_committed = 0;
+    usize m_commitStep = 0;
+    usize m_offset = 0;
     // The largest offset ever handed out. Bytes below it may hold old data; bytes
     // above it are still zero from the OS.
-    std::size_t m_highWater = 0;
+    usize m_highWater = 0;
     // Offset of the allocation that try_grow() may extend, or noLastAllocation.
-    std::size_t m_lastAllocation = noLastAllocation;
+    usize m_lastAllocation = noLastAllocation;
 };
 
 /**
@@ -342,7 +342,7 @@ namespace detail {
  * \brief Returns the index of the first byte in `bytes` that is not arenaFreedByte,
  * i.e. freed arena memory that was written after it was freed.
  */
-[[nodiscard]] std::optional<std::size_t> find_modified_freed_byte(std::span<const std::byte> bytes) noexcept;
+[[nodiscard]] std::optional<usize> find_modified_freed_byte(std::span<const std::byte> bytes) noexcept;
 
 } // namespace detail
 

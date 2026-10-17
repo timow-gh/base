@@ -3,6 +3,7 @@
 #include "base/core/alignment.hpp"
 #include "base/core/asan.hpp"
 #include "base/core/assert.hpp"
+#include "base/core/types.hpp"
 #include "base/platform/virtual_memory.hpp"
 
 #include <algorithm>
@@ -21,45 +22,45 @@ namespace base::memory {
 
 namespace detail {
 
-std::optional<std::size_t> find_modified_freed_byte(std::span<const std::byte> bytes) noexcept {
+std::optional<usize> find_modified_freed_byte(std::span<const std::byte> bytes) noexcept {
     const auto modified = std::ranges::find_if(bytes, [](std::byte value) { return value != arenaFreedByte; });
     if (modified == bytes.end()) {
         return std::nullopt;
     }
-    return static_cast<std::size_t>(modified - bytes.begin());
+    return static_cast<usize>(modified - bytes.begin());
 }
 
 } // namespace detail
 
 namespace {
 
-[[nodiscard]] std::size_t round_up_to_multiple(std::size_t value, std::size_t multiple) noexcept {
+[[nodiscard]] usize round_up_to_multiple(usize value, usize multiple) noexcept {
     return ((value + multiple - 1U) / multiple) * multiple;
 }
 
-[[maybe_unused]] void report_use_after_free(std::size_t offset) noexcept {
+[[maybe_unused]] void report_use_after_free(usize offset) noexcept {
     // Formatted on the stack: the arena must not depend on another allocator.
-    constexpr std::size_t messageCapacity = 160;
+    constexpr usize messageCapacity = 160;
     std::array<char, messageCapacity> buffer{};
     const auto result = std::format_to_n(buffer.data(),
                                          buffer.size(),
                                          "arena: memory at offset {} was written after reset/rewind (use-after-free)",
                                          offset);
-    const auto length = static_cast<std::size_t>(result.out - buffer.data());
+    const auto length = static_cast<usize>(result.out - buffer.data());
     ::base::detail::assert_failed("freed arena memory is unmodified", std::string_view(buffer.data(), length));
 }
 
 } // namespace
 
 std::optional<Arena> Arena::create(const ArenaConfig& config) noexcept {
-    const std::size_t granularity = platform::allocation_granularity();
-    const std::size_t pageSize = platform::page_size();
-    if (config.reserveSize == 0U || config.reserveSize > std::numeric_limits<std::size_t>::max() - granularity) {
+    const usize granularity = platform::allocation_granularity();
+    const usize pageSize = platform::page_size();
+    if (config.reserveSize == 0U || config.reserveSize > std::numeric_limits<usize>::max() - granularity) {
         return std::nullopt;
     }
 
-    const std::size_t reserveSize = align_up(config.reserveSize, granularity);
-    const std::size_t commitStep = std::max(round_up_to_multiple(config.commitSize, pageSize), pageSize);
+    const usize reserveSize = align_up(config.reserveSize, granularity);
+    const usize commitStep = std::max(round_up_to_multiple(config.commitSize, pageSize), pageSize);
     void* base = platform::reserve(reserveSize);
     if (base == nullptr) {
         return std::nullopt;
@@ -67,11 +68,11 @@ std::optional<Arena> Arena::create(const ArenaConfig& config) noexcept {
     return Arena(static_cast<std::byte*>(base), reserveSize, commitStep);
 }
 
-std::optional<Arena> Arena::create(std::size_t reserveSize) noexcept {
+std::optional<Arena> Arena::create(usize reserveSize) noexcept {
     return create(ArenaConfig{reserveSize, defaultArenaCommitSize});
 }
 
-Arena::Arena(std::byte* base, std::size_t reserved, std::size_t commitStep) noexcept
+Arena::Arena(std::byte* base, usize reserved, usize commitStep) noexcept
     : m_base(base)
     , m_reserved(reserved)
     , m_commitStep(commitStep) {}
@@ -114,22 +115,22 @@ void Arena::release_reservation() noexcept {
     m_base = nullptr;
 }
 
-void* Arena::allocate(std::size_t size, std::size_t alignment) noexcept {
+void* Arena::allocate(usize size, usize alignment) noexcept {
     return allocate_impl(size, alignment, Fill::Uninitialized);
 }
 
-void* Arena::allocate_zeroed(std::size_t size, std::size_t alignment) noexcept {
+void* Arena::allocate_zeroed(usize size, usize alignment) noexcept {
     return allocate_impl(size, alignment, Fill::Zeroed);
 }
 
-void* Arena::allocate_impl(std::size_t size, std::size_t alignment, Fill fill) noexcept {
+void* Arena::allocate_impl(usize size, usize alignment, Fill fill) noexcept {
     BASE_ASSERT(is_power_of_two(alignment));
     BASE_ASSERT_MSG(alignment <= platform::page_size(), "alignment larger than the page size is not supported");
 
     // The reservation is aligned to the allocation granularity, which is a multiple
     // of every supported alignment, so aligning the offset aligns the address, and
     // `begin` cannot pass m_reserved.
-    const std::size_t begin = align_up(m_offset, alignment);
+    const usize begin = align_up(m_offset, alignment);
     if (size > m_reserved - begin || !hand_out(begin, begin + size, fill)) {
         return nullptr;
     }
@@ -137,7 +138,7 @@ void* Arena::allocate_impl(std::size_t size, std::size_t alignment, Fill fill) n
     return m_base + begin;
 }
 
-bool Arena::try_grow(void* memory, std::size_t oldSize, std::size_t newSize) noexcept {
+bool Arena::try_grow(void* memory, usize oldSize, usize newSize) noexcept {
     BASE_ASSERT(newSize >= oldSize);
     if (m_lastAllocation == noLastAllocation || memory != m_base + m_lastAllocation ||
         oldSize != m_offset - m_lastAllocation) {
@@ -149,7 +150,7 @@ bool Arena::try_grow(void* memory, std::size_t oldSize, std::size_t newSize) noe
     return hand_out(m_offset, m_lastAllocation + newSize, Fill::Uninitialized);
 }
 
-void* Arena::reallocate(void* memory, std::size_t oldSize, std::size_t newSize, std::size_t alignment) noexcept {
+void* Arena::reallocate(void* memory, usize oldSize, usize newSize, usize alignment) noexcept {
     BASE_ASSERT(newSize >= oldSize);
     BASE_ASSERT(memory != nullptr || oldSize == 0U);
     if (memory != nullptr && try_grow(memory, oldSize, newSize)) {
@@ -162,7 +163,7 @@ void* Arena::reallocate(void* memory, std::size_t oldSize, std::size_t newSize, 
     return moved;
 }
 
-bool Arena::hand_out(std::size_t begin, std::size_t end, Fill fill) noexcept {
+bool Arena::hand_out(usize begin, usize end, Fill fill) noexcept {
     if (end > m_committed && !commit_up_to(end)) {
         return false;
     }
@@ -170,7 +171,7 @@ bool Arena::hand_out(std::size_t begin, std::size_t end, Fill fill) noexcept {
     // [m_offset, m_highWater) is the freed region: in debug builds it holds
     // arenaFreedByte, under ASan it is poisoned. Padding in [m_offset, begin) stays
     // freed; only [begin, end) is handed out.
-    const std::size_t reusedEnd = std::min(end, m_highWater);
+    const usize reusedEnd = std::min(end, m_highWater);
     BASE_ASAN_UNPOISON(m_base + m_offset, end - m_offset);
 
 #if BASE_ARENA_DEBUG
@@ -197,9 +198,9 @@ bool Arena::hand_out(std::size_t begin, std::size_t end, Fill fill) noexcept {
     return true;
 }
 
-bool Arena::commit_up_to(std::size_t end) noexcept {
+bool Arena::commit_up_to(usize end) noexcept {
     // m_reserved is a multiple of the page size, so the target stays page aligned.
-    const std::size_t target = std::min(round_up_to_multiple(end, m_commitStep), m_reserved);
+    const usize target = std::min(round_up_to_multiple(end, m_commitStep), m_reserved);
     if (!platform::commit(m_base + m_committed, target - m_committed)) {
         return false;
     }
@@ -208,7 +209,7 @@ bool Arena::commit_up_to(std::size_t end) noexcept {
     return true;
 }
 
-bool Arena::commit_at_least(std::size_t size, Prefault prefault) noexcept {
+bool Arena::commit_at_least(usize size, Prefault prefault) noexcept {
     if (size > m_reserved) {
         return false;
     }
@@ -218,13 +219,13 @@ bool Arena::commit_at_least(std::size_t size, Prefault prefault) noexcept {
     if (prefault == Prefault::Yes) {
         // Pages below the high water mark were handed out before, so they are mapped
         // already, and in debug builds their freed part must keep arenaFreedByte.
-        const std::size_t pageSize = platform::page_size();
+        const usize pageSize = platform::page_size();
         touch_pages(align_up(m_highWater, pageSize), std::min(align_up(size, pageSize), m_committed));
     }
     return true;
 }
 
-void Arena::touch_pages(std::size_t begin, std::size_t end) noexcept {
+void Arena::touch_pages(usize begin, usize end) noexcept {
     if (begin >= end) {
         return;
     }
@@ -232,8 +233,8 @@ void Arena::touch_pages(std::size_t begin, std::size_t end) noexcept {
     // allocate_zeroed() relies on. A read would not do: Linux maps a shared zero page
     // for it and faults again on the first write.
     BASE_ASAN_UNPOISON(m_base + begin, end - begin);
-    const std::size_t pageSize = platform::page_size();
-    for (std::size_t offset = begin; offset < end; offset += pageSize) {
+    const usize pageSize = platform::page_size();
+    for (usize offset = begin; offset < end; offset += pageSize) {
         volatile std::byte* page = m_base + offset;
         *page = std::byte{0};
     }

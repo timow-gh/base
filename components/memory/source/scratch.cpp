@@ -1,6 +1,7 @@
 #include "base/memory/scratch.hpp"
 
 #include "base/core/assert.hpp"
+#include "base/core/types.hpp"
 
 #include <algorithm>
 #include <array>
@@ -14,7 +15,7 @@ namespace detail {
 
 namespace {
 
-constexpr std::size_t scratchArenaCount = 2;
+constexpr usize scratchArenaCount = 2;
 
 using ScratchArenas = std::array<std::optional<Arena>, scratchArenaCount>;
 

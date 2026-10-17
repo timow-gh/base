@@ -1,13 +1,13 @@
 #include "base/memory/arena.hpp"
 
 #include "base/core/alignment.hpp"
+#include "base/core/types.hpp"
 #include "base/platform/virtual_memory.hpp"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <optional>
@@ -19,6 +19,7 @@
 using base::memory::Arena;
 using base::memory::ArenaConfig;
 using base::memory::ArenaScope;
+using namespace base::types;
 
 namespace {
 
@@ -30,8 +31,8 @@ namespace {
     return std::move(*arena);
 }
 
-[[nodiscard]] std::uintptr_t address_of(const void* pointer) {
-    return reinterpret_cast<std::uintptr_t>(pointer);
+[[nodiscard]] uptr address_of(const void* pointer) {
+    return reinterpret_cast<uptr>(pointer);
 }
 
 struct Point {
@@ -76,7 +77,7 @@ TEST(Arena, CreateFromSizeUsesTheUnits) {
 namespace {
 
 struct alignas(16) Aligned16 {
-    float values[3] = {}; // NOLINT(modernize-avoid-c-arrays): layout under test
+    f32 values[3] = {}; // NOLINT(modernize-avoid-c-arrays): layout under test
 };
 
 static_assert(base::memory::arena_bytes_for<char>(10) == 10U);
@@ -89,9 +90,9 @@ static_assert(base::memory::arena_bytes_for<Aligned16>(0) == 0U);
 TEST(Arena, ArenaBytesForHoldsThePushedArrayAfterAnOddAllocation) {
     // Fill a whole reservation exactly: the arena must hold the array even when the
     // previous allocation leaves the worst-case padding in front of it.
-    const std::size_t granularity = base::platform::allocation_granularity();
-    const std::size_t count = (granularity - 1U - (alignof(Aligned16) - 1U)) / sizeof(Aligned16);
-    const std::size_t needed = 1U + base::memory::arena_bytes_for<Aligned16>(count);
+    const usize granularity = base::platform::allocation_granularity();
+    const usize count = (granularity - 1U - (alignof(Aligned16) - 1U)) / sizeof(Aligned16);
+    const usize needed = 1U + base::memory::arena_bytes_for<Aligned16>(count);
     ASSERT_LE(needed, granularity);
 
     Arena arena = make_arena({needed, granularity});
@@ -102,22 +103,21 @@ TEST(Arena, ArenaBytesForHoldsThePushedArrayAfterAnOddAllocation) {
 }
 
 TEST(Arena, SumOfArenaBytesForHoldsMixedPushes) {
-    constexpr std::size_t vertexCount = 10'000;
-    constexpr std::size_t indexCount = 30'000;
-    constexpr std::size_t needed = base::memory::arena_bytes_for<Aligned16>(vertexCount) +
-                                   base::memory::arena_bytes_for<std::uint32_t>(indexCount) +
-                                   base::memory::arena_bytes_for<char>(3);
+    constexpr usize vertexCount = 10'000;
+    constexpr usize indexCount = 30'000;
+    constexpr usize needed = base::memory::arena_bytes_for<Aligned16>(vertexCount) +
+                             base::memory::arena_bytes_for<u32>(indexCount) + base::memory::arena_bytes_for<char>(3);
 
     Arena arena = make_arena({needed, base::kib(64)});
     EXPECT_EQ(arena.push_array<char>(3).size(), 3U);
     EXPECT_EQ(arena.push_array<Aligned16>(vertexCount).size(), vertexCount);
-    EXPECT_EQ(arena.push_array<std::uint32_t>(indexCount).size(), indexCount);
+    EXPECT_EQ(arena.push_array<u32>(indexCount).size(), indexCount);
     EXPECT_LE(arena.used(), needed);
 }
 
 TEST(Arena, EveryPowerOfTwoAlignmentUpToThePageSizeIsHonored) {
     Arena arena = make_arena();
-    for (std::size_t alignment = 1; alignment <= base::platform::page_size(); alignment *= 2U) {
+    for (usize alignment = 1; alignment <= base::platform::page_size(); alignment *= 2U) {
         // An odd-sized allocation first, so the next one actually needs padding.
         ASSERT_NE(arena.allocate(3, 1), nullptr);
         void* memory = arena.allocate(8, alignment);
@@ -143,11 +143,11 @@ TEST(Arena, AllocationsAreLinearAndDoNotOverlap) {
 
 TEST(Arena, GrowsAcrossManyCommitSteps) {
     Arena arena = make_arena({base::mib(64), base::kib(64)});
-    const std::size_t reservedBefore = arena.reserved();
-    constexpr std::size_t chunkSize = base::kib(1);
-    constexpr std::size_t chunkCount = 10U * 1024U;
+    const usize reservedBefore = arena.reserved();
+    constexpr usize chunkSize = base::kib(1);
+    constexpr usize chunkCount = 10U * 1024U;
 
-    for (std::size_t i = 0; i < chunkCount; ++i) {
+    for (usize i = 0; i < chunkCount; ++i) {
         auto* chunk = static_cast<std::byte*>(arena.allocate(chunkSize, 8));
         ASSERT_NE(chunk, nullptr);
         std::memset(chunk, static_cast<int>(i & 0xFFU), chunkSize);
@@ -160,19 +160,19 @@ TEST(Arena, GrowsAcrossManyCommitSteps) {
 }
 
 TEST(Arena, ExhaustedReservationReturnsNullptr) {
-    const std::size_t granularity = base::platform::allocation_granularity();
+    const usize granularity = base::platform::allocation_granularity();
     Arena arena = make_arena({granularity, granularity});
     EXPECT_EQ(arena.allocate(granularity + 1U, 1), nullptr);
     ASSERT_NE(arena.allocate(granularity, 1), nullptr);
     EXPECT_EQ(arena.allocate(1, 1), nullptr);
-    EXPECT_EQ(arena.allocate(std::numeric_limits<std::size_t>::max(), 1), nullptr);
+    EXPECT_EQ(arena.allocate(std::numeric_limits<usize>::max(), 1), nullptr);
 }
 
 TEST(Arena, ResetRewindsToTheStartAndKeepsCommittedMemory) {
     Arena arena = make_arena();
     void* first = arena.allocate(base::kib(200), 16);
     ASSERT_NE(first, nullptr);
-    const std::size_t committed = arena.committed();
+    const usize committed = arena.committed();
 
     arena.reset();
     EXPECT_EQ(arena.used(), 0U);
@@ -223,7 +223,7 @@ TEST(Arena, PushConstructsFromArguments) {
     EXPECT_EQ(point->y, 4);
     EXPECT_TRUE(base::is_aligned(address_of(point), alignof(Point)));
 
-    const double* value = arena.push<double>(2.5);
+    const f64* value = arena.push<f64>(2.5);
     ASSERT_NE(value, nullptr);
     EXPECT_DOUBLE_EQ(*value, 2.5);
 }
@@ -243,7 +243,7 @@ TEST(Arena, PushArrayValueInitializesReusedMemory) {
 TEST(Arena, PushArrayRejectsZeroAndOverflowingCounts) {
     Arena arena = make_arena();
     EXPECT_TRUE(arena.push_array<int>(0).empty());
-    EXPECT_TRUE(arena.push_array<std::uint64_t>(std::numeric_limits<std::size_t>::max() / 4U).empty());
+    EXPECT_TRUE(arena.push_array<u64>(std::numeric_limits<usize>::max() / 4U).empty());
     EXPECT_EQ(arena.used(), 0U);
 }
 
@@ -282,7 +282,7 @@ TEST(Arena, ZeroSizedAllocationReturnsAlignedPointer) {
     Arena arena = make_arena();
     void* memory = arena.allocate(0, 64);
     ASSERT_NE(memory, nullptr);
-    EXPECT_TRUE(base::is_aligned(address_of(memory), std::size_t{64}));
+    EXPECT_TRUE(base::is_aligned(address_of(memory), usize{64}));
 }
 
 TEST(Arena, TryGrowExtendsTheLastAllocationInPlace) {
@@ -301,7 +301,7 @@ TEST(Arena, TryGrowFailsWhenTheBlockIsNotTheLastAllocation) {
     void* first = arena.allocate(100, 8);
     ASSERT_NE(first, nullptr);
     ASSERT_NE(arena.allocate(10, 8), nullptr);
-    const std::size_t used = arena.used();
+    const usize used = arena.used();
 
     EXPECT_FALSE(arena.try_grow(first, 100, 300));
     EXPECT_EQ(arena.used(), used);
@@ -346,7 +346,7 @@ TEST(Arena, TryGrowCommitsAcrossCommitSteps) {
 }
 
 TEST(Arena, TryGrowFailsBeyondTheReservation) {
-    const std::size_t granularity = base::platform::allocation_granularity();
+    const usize granularity = base::platform::allocation_granularity();
     Arena arena = make_arena({granularity, granularity});
     void* block = arena.allocate(1, 1);
     ASSERT_NE(block, nullptr);
@@ -374,7 +374,7 @@ TEST(Arena, ReallocateCopiesWhenTheBlockCannotGrow) {
     auto* moved = static_cast<std::byte*>(arena.reallocate(block, 16, 64, 16));
     ASSERT_NE(moved, nullptr);
     EXPECT_NE(moved, block);
-    EXPECT_TRUE(base::is_aligned(address_of(moved), std::size_t{16}));
+    EXPECT_TRUE(base::is_aligned(address_of(moved), usize{16}));
     EXPECT_TRUE(std::all_of(moved, moved + 16, [](std::byte value) { return value == std::byte{0x55}; }));
 
     // The copy is the last allocation now, so the next growth is in place again.
@@ -389,7 +389,7 @@ TEST(Arena, ReallocateFromNullptrAllocates) {
 }
 
 TEST(Arena, ReallocateReturnsNullptrWhenExhaustedAndKeepsTheOldBlock) {
-    const std::size_t granularity = base::platform::allocation_granularity();
+    const usize granularity = base::platform::allocation_granularity();
     Arena arena = make_arena({granularity, granularity});
     auto* block = static_cast<std::byte*>(arena.allocate(16, 8));
     ASSERT_NE(block, nullptr);
@@ -406,7 +406,7 @@ TEST(Arena, CommitAtLeastCommitsWithoutAllocating) {
     EXPECT_GE(arena.committed(), base::mib(1));
     EXPECT_EQ(arena.used(), 0U);
 
-    const std::size_t committed = arena.committed();
+    const usize committed = arena.committed();
     ASSERT_NE(arena.allocate(base::mib(1), 8), nullptr);
     EXPECT_EQ(arena.committed(), committed);
 }
@@ -414,7 +414,7 @@ TEST(Arena, CommitAtLeastCommitsWithoutAllocating) {
 TEST(Arena, CommitAtLeastBelowTheCommittedSizeChangesNothing) {
     Arena arena = make_arena({base::mib(16), base::kib(64)});
     ASSERT_TRUE(arena.commit_at_least(base::mib(1)));
-    const std::size_t committed = arena.committed();
+    const usize committed = arena.committed();
 
     EXPECT_TRUE(arena.commit_at_least(base::kib(4)));
     EXPECT_TRUE(arena.commit_at_least(0));
@@ -422,7 +422,7 @@ TEST(Arena, CommitAtLeastBelowTheCommittedSizeChangesNothing) {
 }
 
 TEST(Arena, CommitAtLeastBeyondTheReservationFails) {
-    const std::size_t granularity = base::platform::allocation_granularity();
+    const usize granularity = base::platform::allocation_granularity();
     Arena arena = make_arena({granularity, granularity});
     EXPECT_FALSE(arena.commit_at_least(granularity + 1U));
     EXPECT_EQ(arena.committed(), 0U);

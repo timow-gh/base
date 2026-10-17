@@ -1,8 +1,8 @@
 #pragma once
 
+#include "base/core/types.hpp"
 #include "base/memory/arena.hpp"
 
-#include <cstddef>
 #include <limits>
 #include <new>
 #include <type_traits>
@@ -50,11 +50,11 @@ public:
 
     /**
      * \brief Uninitialized storage for `count` Ts.
-     * \throws std::bad_array_new_length if `count` Ts do not fit in std::size_t.
+     * \throws std::bad_array_new_length if `count` Ts do not fit in usize.
      * \throws std::bad_alloc when the arena is exhausted.
      */
-    [[nodiscard]] T* allocate(std::size_t count) {
-        if (count > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
+    [[nodiscard]] T* allocate(usize count) {
+        if (count > std::numeric_limits<usize>::max() / sizeof(T)) {
             throw std::bad_array_new_length();
         }
         void* memory = m_arena->allocate(count * sizeof(T), alignof(T));
@@ -66,7 +66,7 @@ public:
 
     // Even the most recent block is not given back: that would move the arena before
     // markers taken after the block, and rewinding to them would then fail.
-    void deallocate([[maybe_unused]] T* memory, [[maybe_unused]] std::size_t count) noexcept {}
+    void deallocate([[maybe_unused]] T* memory, [[maybe_unused]] usize count) noexcept {}
 
     [[nodiscard]] Arena& arena() const noexcept { return *m_arena; }
 
