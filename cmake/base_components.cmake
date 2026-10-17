@@ -46,9 +46,35 @@ function(base_resolve_components out_var)
     set(${out_var} ${ordered} PARENT_SCOPE)
 endfunction()
 
-# Creates the static library ${PROJECT_NAME}_<name> with the alias
-# ${PROJECT_NAME}::<name>, links its declared dependencies and installs it as its
-# own export set, so find_package() can load each component separately.
+# Creates the object library ${target}_header_check with one translation unit per
+# header that only includes it. It gives the warnings and static analysis of a
+# header-only component something to compile without putting them on the interface
+# target, where they would reach consumers, and fails if a header does not compile
+# on its own.
+function(base_add_header_check target)
+    set(check_target ${target}_header_check)
+    set(check_dir "${CMAKE_CURRENT_BINARY_DIR}/header_check")
+    set(check_sources "")
+    foreach (header IN LISTS ARGN)
+        string(REGEX REPLACE "^include/" "" include_path "${header}")
+        string(MAKE_C_IDENTIFIER "${include_path}" source_name)
+        set(source "${check_dir}/${source_name}.cpp")
+        file(CONFIGURE OUTPUT "${source}"
+                CONTENT "#include \"@include_path@\"\n"
+                @ONLY)
+        list(APPEND check_sources "${source}")
+    endforeach ()
+
+    add_library(${check_target} OBJECT ${check_sources})
+    target_link_libraries(${check_target} PRIVATE ${target})
+    set_target_properties(${check_target} PROPERTIES FOLDER ${PROJECT_NAME})
+endfunction()
+
+# Creates the library ${PROJECT_NAME}_<name> with the alias ${PROJECT_NAME}::<name>,
+# links its declared dependencies and installs it as its own export set, so
+# find_package() can load each component separately. Components with SOURCES are
+# static libraries; header-only components are interface libraries, because a static
+# library without sources has no link language.
 function(base_add_component)
     cmake_parse_arguments(PARSE_ARGV 0 arg "" "NAME" "SOURCES;HEADERS")
     if (NOT arg_NAME)
@@ -58,13 +84,24 @@ function(base_add_component)
     set(name ${arg_NAME})
     set(target ${PROJECT_NAME}_${name})
 
-    add_library(${target} STATIC)
+    if (arg_SOURCES)
+        add_library(${target} STATIC)
+        set(scope PUBLIC)
+        target_sources(${target} PRIVATE ${arg_SOURCES})
+        set_target_properties(${target}
+                PROPERTIES
+                OUTPUT_NAME ${target}
+                DEBUG_POSTFIX d
+                # Static libraries that may end up inside a consumer's shared library.
+                POSITION_INDEPENDENT_CODE ${${PROJECT_NAME}_POSITION_INDEPENDENT_CODE})
+    else ()
+        add_library(${target} INTERFACE)
+        set(scope INTERFACE)
+    endif ()
     add_library(${PROJECT_NAME}::${name} ALIAS ${target})
 
     target_sources(${target}
-            PRIVATE
-            ${arg_SOURCES}
-            PUBLIC
+            ${scope}
             FILE_SET HEADERS
             BASE_DIRS include
             FILES ${arg_HEADERS})
@@ -72,24 +109,27 @@ function(base_add_component)
     set_target_properties(${target}
             PROPERTIES
             EXPORT_NAME ${name}
-            OUTPUT_NAME ${target}
-            DEBUG_POSTFIX d
-            # Static libraries that may end up inside a consumer's shared library.
-            POSITION_INDEPENDENT_CODE ${${PROJECT_NAME}_POSITION_INDEPENDENT_CODE}
             FOLDER ${PROJECT_NAME})
 
-    target_compile_features(${target} PUBLIC cxx_std_23)
+    target_compile_features(${target} ${scope} cxx_std_23)
 
     foreach (dependency IN LISTS ${PROJECT_NAME}_COMPONENT_DEPENDS_${name})
-        target_link_libraries(${target} PUBLIC ${PROJECT_NAME}::${dependency})
+        target_link_libraries(${target} ${scope} ${PROJECT_NAME}::${dependency})
     endforeach ()
 
+    if (arg_SOURCES)
+        set(checked_target ${target})
+    elseif (${PROJECT_NAME}_USE_WARNINGS OR ${PROJECT_NAME}_STATIC_ANALYSIS)
+        base_add_header_check(${target} ${arg_HEADERS})
+        set(checked_target ${target}_header_check)
+    endif ()
+
     if (${PROJECT_NAME}_USE_WARNINGS)
-        add_warnings_and_compile_options(${target} "${${PROJECT_NAME}_WARNINGS_AS_ERRORS}")
+        add_warnings_and_compile_options(${checked_target} "${${PROJECT_NAME}_WARNINGS_AS_ERRORS}")
     endif ()
 
     if (${PROJECT_NAME}_STATIC_ANALYSIS)
-        enable_static_analysis(${target} "${${PROJECT_NAME}_WARNINGS_AS_ERRORS}")
+        enable_static_analysis(${checked_target} "${${PROJECT_NAME}_WARNINGS_AS_ERRORS}")
     endif ()
 
     set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_ENABLED_COMPONENTS ${name})
