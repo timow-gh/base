@@ -1,7 +1,7 @@
 if (WIN32)
-    set(platform_backend_sources source/win32/virtual_memory.cpp)
+    set(platform_backend_sources source/win32/heap.cpp source/win32/virtual_memory.cpp)
 else ()
-    set(platform_backend_sources source/posix/virtual_memory.cpp)
+    set(platform_backend_sources source/posix/heap.cpp source/posix/virtual_memory.cpp)
 endif ()
 
 base_add_component(
@@ -9,6 +9,7 @@ base_add_component(
         SOURCES
         ${platform_backend_sources}
         HEADERS
+        include/base/platform/heap.hpp
         include/base/platform/virtual_memory.hpp)
 
 if (WIN32)
@@ -20,5 +21,6 @@ if (${PROJECT_NAME}_TESTS)
     base_add_component_test(
             NAME platform
             SOURCES
+            test/heap_test.cpp
             test/virtual_memory_test.cpp)
 endif ()
