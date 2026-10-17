@@ -22,7 +22,7 @@ using base::memory::ArenaString;
 using base::memory::ArenaUnorderedMap;
 using base::memory::ArenaUnorderedSet;
 using base::memory::ArenaVector;
-using base::memory::ScratchScope;
+using base::memory::ScratchArena;
 
 namespace {
 
@@ -194,18 +194,18 @@ TEST(ArenaAllocator, NestedContainersShareTheArena) {
     EXPECT_GE(arena.used(), 1000U);
 }
 
-TEST(ArenaAllocator, ContainerInAScratchScopeIsFreedWithTheScope) {
+TEST(ArenaAllocator, ContainerInAScratchArenaIsFreedWithIt) {
     std::size_t usedBefore = 0;
     const Arena* scratchArena = nullptr;
     {
-        const ScratchScope scratch;
+        const ScratchArena scratch;
         scratchArena = &scratch.arena();
         usedBefore = scratch.arena().used();
         ArenaVector<int> values(scratch.arena());
         values.resize(10'000);
         EXPECT_GT(scratch.arena().used(), usedBefore);
     }
-    const ScratchScope again;
+    const ScratchArena again;
     ASSERT_EQ(&again.arena(), scratchArena);
     EXPECT_EQ(again.arena().used(), usedBefore);
 }
