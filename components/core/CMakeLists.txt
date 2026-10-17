@@ -6,6 +6,7 @@ base_add_component(
         include/base/core/alignment.hpp
         include/base/core/asan.hpp
         include/base/core/assert.hpp
+        include/base/core/atomic.hpp
         include/base/core/config.hpp
         include/base/core/types.hpp
         include/base/core/units.hpp)
@@ -16,6 +17,7 @@ if (${PROJECT_NAME}_TESTS)
             SOURCES
             test/alignment_test.cpp
             test/assert_test.cpp
+            test/atomic_test.cpp
             test/types_test.cpp
             test/units_test.cpp)
 endif ()
