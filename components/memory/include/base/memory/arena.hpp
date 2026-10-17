@@ -45,6 +45,11 @@ static_assert(sizeof(void*) >= sizeof(u64), "the default arena reservation assum
 inline constexpr usize defaultArenaReserveSize = gib(64);
 inline constexpr usize defaultArenaCommitSize = kib(64);
 
+// The reservation is only page aligned on POSIX, so allocate() can align an address to
+// at most the page size. 4 KiB is the smallest page size of the supported platforms,
+// which makes it the largest alignment that holds everywhere and in every build.
+inline constexpr usize maxArenaAlignment = kib(4);
+
 /**
  * \brief Bytes an arena must hold for `count` objects of T, pushed with one
  * push_array<T>(count) or with `count` consecutive push<T>() calls: the objects plus
@@ -209,6 +214,7 @@ public:
     template <TriviallyDestructible T, typename... Args>
         requires std::constructible_from<T, Args...>
     [[nodiscard]] T* push(Args&&... args) noexcept(std::is_nothrow_constructible_v<T, Args...>) {
+        static_assert(alignof(T) <= maxArenaAlignment, "an arena cannot align beyond maxArenaAlignment");
         void* memory = allocate(sizeof(T), alignof(T));
         if (memory == nullptr) {
             return nullptr;
@@ -223,6 +229,7 @@ public:
     template <TriviallyDestructible T>
         requires std::default_initializable<T>
     [[nodiscard]] std::span<T> push_array(usize count) noexcept(std::is_nothrow_default_constructible_v<T>) {
+        static_assert(alignof(T) <= maxArenaAlignment, "an arena cannot align beyond maxArenaAlignment");
         if (count == 0U || count > std::numeric_limits<usize>::max() / sizeof(T)) {
             return {};
         }

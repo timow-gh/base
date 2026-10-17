@@ -96,6 +96,10 @@ The design decisions:
   Destructors never run, so `push<T>()` / `push_array<T>()` only accept trivially
   destructible types.
   `std::string` and similar types are a compile error.
+- **STL containers through `ArenaAllocator`.** Containers run destructors, but
+  their freed blocks are not reused either. They suit containers that are built,
+  used and discarded together with the arena or an `ArenaScope`. A long-lived
+  container that keeps erasing and inserting grows its arena for as long as it lives.
 - **No zeroing on rewind.** `reset()` and `rewind_to()` only move the offset; the
   next user overwrites the memory anyway. `allocate_zeroed()` and `push_array()`
   clear only reused bytes. Memory that was never handed out is still zero from
