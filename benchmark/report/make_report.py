@@ -594,17 +594,26 @@ def main():
             for key in ordered_keys
         ],
     }
+    page = render_page("template.html", body, chart_data, arguments.fragment)
+    arguments.output.write_text(page, encoding="utf-8")
+    print(f"wrote {arguments.output} ({len(ordered_keys)} workloads)")
+
+
+def render_page(template_name, body, chart_data, fragment=False):
+    """Fills a template of this folder with the body, the chart data and the shared style and script."""
+    folder = Path(__file__).parent
     # "</" would end the <script> element early.
     data_json = json.dumps(chart_data, separators=(",", ":")).replace("</", "<\\/")
-
-    template = (Path(__file__).parent / "template.html").read_text(encoding="utf-8")
-    page = template.replace("/*__REPORT_BODY__*/", body).replace("/*__REPORT_DATA__*/", data_json)
-    if not arguments.fragment:
+    page = (folder / template_name).read_text(encoding="utf-8")
+    for placeholder, content in [("/*__REPORT_STYLE__*/", (folder / "style.css").read_text(encoding="utf-8")),
+                                 ("/*__COMMON_SCRIPT__*/", (folder / "common.js").read_text(encoding="utf-8")),
+                                 ("/*__REPORT_BODY__*/", body), ("/*__REPORT_DATA__*/", data_json)]:
+        page = page.replace(placeholder, content)
+    if not fragment:
         page = ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
                 '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
                 f"{page}\n</html>\n")
-    arguments.output.write_text(page, encoding="utf-8")
-    print(f"wrote {arguments.output} ({len(ordered_keys)} workloads)")
+    return page
 
 
 if __name__ == "__main__":
