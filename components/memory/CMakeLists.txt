@@ -2,6 +2,7 @@ base_add_component(
         NAME memory
         SOURCES
         source/arena.cpp
+        source/arena_allocator.cpp
         source/scratch.cpp
         HEADERS
         include/base/memory/arena.hpp

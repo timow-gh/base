@@ -9,6 +9,21 @@
 
 namespace base::memory {
 
+namespace detail {
+
+/**
+ * \brief Throw the errors of ArenaAllocator::allocate(). Defined in a source file, as the
+ * standard library does with its own throw helpers, so they are never inlined.
+ *
+ * With the throws inline, MSVC inlines vector's whole reallocation path into the
+ * function behind push_back, which then grows too large to be inlined itself: every
+ * push_back becomes a call, about 2.5× slower than with std::allocator.
+ */
+[[noreturn]] void throw_bad_alloc();
+[[noreturn]] void throw_bad_array_new_length();
+
+} // namespace detail
+
 /**
  * \brief STL allocator that takes its memory from an Arena, so that standard containers
  * can live in one:
@@ -66,11 +81,11 @@ public:
         // holding an ArenaVector of its own type.
         static_assert(alignof(T) <= maxArenaAlignment, "an arena cannot align beyond maxArenaAlignment");
         if (count > std::numeric_limits<usize>::max() / sizeof(T)) {
-            throw std::bad_array_new_length();
+            detail::throw_bad_array_new_length();
         }
         void* memory = m_arena->allocate(count * sizeof(T), alignof(T));
         if (memory == nullptr) {
-            throw std::bad_alloc();
+            detail::throw_bad_alloc();
         }
         return static_cast<T*>(memory);
     }
