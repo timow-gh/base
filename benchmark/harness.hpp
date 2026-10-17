@@ -7,6 +7,9 @@
 #include <benchmark/benchmark.h>
 
 #include <format>
+#include <functional>
+#include <map>
+#include <string>
 #include <string_view>
 
 namespace base::bench {
@@ -39,7 +42,16 @@ struct WorkloadSize {
  */
 template <typename Variant, typename Work>
 void run_workload(benchmark::State& state, WorkloadSize size, Work work) {
-    const Footprint footprint = Variant::measure(work);
+    // Google Benchmark calls a benchmark once per repetition and once per probe for the
+    // iteration count, and the footprint is the same every time: measure it once.
+    // State::name() leaves out the arguments, so the key adds the size.
+    static std::map<std::string, Footprint, std::less<>> footprints;
+    const std::string key = std::format("{}/{}", state.name(), state.range(0));
+    auto found = footprints.find(key);
+    if (found == footprints.end()) {
+        found = footprints.emplace(key, Variant::measure(work)).first;
+    }
+    const Footprint& footprint = found->second;
     Variant::time(state, work, footprint);
 
     state.SetItemsProcessed(state.iterations() * static_cast<i64>(size.operations));
