@@ -109,9 +109,11 @@ struct ReportedZones {
             continue;
         }
         ++zones.omittedCount;
-        const auto cheapest = std::ranges::min_element(zones.anchors, std::ranges::less{}, costOf);
-        if (costOf(anchor) > costOf(*cheapest)) {
-            *cheapest = anchor;
+        // A reference, not the iterator: std::array's iterator is a pointer in libstdc++
+        // but a class in MSVC's debug builds, so neither `auto` nor `auto*` fits both.
+        const Anchor*& cheapest = *std::ranges::min_element(zones.anchors, std::ranges::less{}, costOf);
+        if (costOf(anchor) > costOf(cheapest)) {
+            cheapest = anchor;
         }
     }
     std::ranges::sort(std::span(zones.anchors).first(zones.count), std::ranges::greater{}, costOf);

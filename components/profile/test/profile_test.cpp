@@ -56,7 +56,11 @@ void cheap_zone() {
 
 template <usize... Indices>
 void enter_cheap_zones(std::index_sequence<Indices...> /*indices*/) {
-    (cheap_zone<Indices>(), ...);
+    // A fold over the calls would nest once per index, beyond clang's limit of 256.
+    constexpr std::array zones{&cheap_zone<Indices>...};
+    for (void (*const zone)() : zones) {
+        zone();
+    }
 }
 
 [[nodiscard]] ZoneStats stats_of(std::string_view name) {
