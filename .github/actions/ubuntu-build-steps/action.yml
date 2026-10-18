@@ -99,9 +99,16 @@ runs:
         for workflow in $WORKFLOWS; do
           # workflow-test-gcc-debug-asan -> conf-, build- and test-gcc-debug-asan
           preset="${workflow#workflow-test-}"
+          # GoogleTest enables C too, so both compilers are pinned.
           case "$workflow" in
-            *-gcc-*) compiler="g++-$BASE_CI_GCC_VERSION" ;;
-            *-clang-*) compiler="clang++-$BASE_CI_CLANG_VERSION" ;;
+            *-gcc-*)
+              c_compiler="gcc-$BASE_CI_GCC_VERSION"
+              cxx_compiler="g++-$BASE_CI_GCC_VERSION"
+              ;;
+            *-clang-*)
+              c_compiler="clang-$BASE_CI_CLANG_VERSION"
+              cxx_compiler="clang++-$BASE_CI_CLANG_VERSION"
+              ;;
           esac
 
           echo "::group::Configure conf-$preset"
@@ -109,7 +116,9 @@ runs:
           # occasionally returns transient 5xx/connection errors, so retry with backoff.
           for attempt in 1 2 3 4 5; do
             if cmake --preset "conf-$preset" \
-                -DCMAKE_CXX_COMPILER="$compiler" \
+                -DCMAKE_C_COMPILER="$c_compiler" \
+                -DCMAKE_CXX_COMPILER="$cxx_compiler" \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
                 -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
                 -Dbase_STATIC_ANALYSIS="$static_analysis"; then
               break
