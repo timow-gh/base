@@ -1,6 +1,3 @@
-[![Ubuntu Build](https://github.com/timow-gh/base/actions/workflows/ubuntu-build.yml/badge.svg?branch=main)](https://github.com/timow-gh/base/actions/workflows/ubuntu-build.yml)
-[![Windows Build](https://github.com/timow-gh/base/actions/workflows/windows-build.yml/badge.svg)](https://github.com/timow-gh/base/actions/workflows/windows-build.yml)
-
 # base
 
 A C++23 library of components, each a CMake target `base::<component>` (for

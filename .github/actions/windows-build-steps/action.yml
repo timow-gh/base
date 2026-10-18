@@ -1,0 +1,49 @@
+name: 'Windows CMake Workflow'
+description: 'Configure, build and test a CMake workflow preset with MSVC'
+inputs:
+  cmake_workflow:
+    description: 'The workflow preset to run (e.g. workflow-test-msvc-debug)'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Select presets
+      id: preset
+      run: |
+        # workflow-test-msvc-debug -> conf-, build- and test-msvc-debug
+        $preset = '${{ inputs.cmake_workflow }}' -replace '^workflow-test-', ''
+        "name=$preset" >> $env:GITHUB_OUTPUT
+        # Read by cmake/CPM.cmake, so GoogleTest is cloned only when the cache misses.
+        # Forward slashes: CMake treats backslashes in paths as escapes.
+        "CPM_SOURCE_CACHE=$($env:RUNNER_TEMP -replace '\\', '/')/cpm" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    - name: Cache CPM sources
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/cpm
+        key: cpm-${{ runner.os }}-${{ hashFiles('dependencies/**') }}
+
+    - name: Setup MSVC
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Configure
+      run: |
+        # CPM clones GoogleTest while configuring when the cache misses. GitHub
+        # occasionally returns transient errors, so retry the configure step with backoff.
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+          cmake --preset conf-${{ steps.preset.outputs.name }}
+          if ($LASTEXITCODE -eq 0) { break }
+          if ($attempt -eq 5) { exit 1 }
+          Start-Sleep -Seconds ($attempt * 30)
+        }
+      shell: pwsh
+
+    - name: Build
+      run: cmake --build --preset build-${{ steps.preset.outputs.name }}
+      shell: pwsh
+
+    - name: Test
+      run: ctest --preset test-${{ steps.preset.outputs.name }}
+      shell: pwsh

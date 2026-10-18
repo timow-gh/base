@@ -64,6 +64,8 @@ endfunction()
 # - On Windows a replacement applies to the module (exe or DLL) it is linked into only.
 # - Under AddressSanitizer it takes over from ASan's operator new, so ASan no longer
 #   reports new/delete mismatches; it still checks every access to the blocks.
+# - Under ThreadSanitizer it cannot be linked: TSan's runtime defines operator new
+#   itself, so the replacement is a duplicate definition.
 set(global_new_target ${PROJECT_NAME}_profile_global_new)
 base_add_global_new_library(${global_new_target})
 add_library(${PROJECT_NAME}::profile_global_new ALIAS ${global_new_target})
@@ -118,18 +120,21 @@ if (${PROJECT_NAME}_TESTS)
     # into them, which the other profile tests must not depend on.
     #
     # The tracking replacement is a second build of global_new.cpp in allocation mode,
-    # so that it is tested in every build, like the file output above.
-    set(global_new_tracking_target ${PROJECT_NAME}_profile_global_new_tracking)
-    base_add_global_new_library(${global_new_tracking_target} BASE_PROFILE_ALLOCATIONS=1)
-    set_target_properties(${global_new_tracking_target} PROPERTIES FOLDER ${PROJECT_NAME}/tests)
+    # so that it is tested in every build, like the file output above. Except under
+    # ThreadSanitizer, where no replacement can be linked (see above).
+    if (NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize=thread")
+        set(global_new_tracking_target ${PROJECT_NAME}_profile_global_new_tracking)
+        base_add_global_new_library(${global_new_tracking_target} BASE_PROFILE_ALLOCATIONS=1)
+        set_target_properties(${global_new_tracking_target} PROPERTIES FOLDER ${PROJECT_NAME}/tests)
 
-    set(global_new_test_target ${PROJECT_NAME}_profile_global_new_tests)
-    add_executable(${global_new_test_target} test/global_new_test.cpp)
-    target_link_libraries(${global_new_test_target} PRIVATE gtest_main ${global_new_tracking_target})
-    set_target_properties(${global_new_test_target} PROPERTIES FOLDER ${PROJECT_NAME}/tests)
-    add_test(NAME ${PROJECT_NAME}.profile_global_new COMMAND ${global_new_test_target})
-    set_tests_properties(${PROJECT_NAME}.profile_global_new PROPERTIES TIMEOUT 120)
-    set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_COVERAGE_TESTS ${global_new_test_target})
+        set(global_new_test_target ${PROJECT_NAME}_profile_global_new_tests)
+        add_executable(${global_new_test_target} test/global_new_test.cpp)
+        target_link_libraries(${global_new_test_target} PRIVATE gtest_main ${global_new_tracking_target})
+        set_target_properties(${global_new_test_target} PROPERTIES FOLDER ${PROJECT_NAME}/tests)
+        add_test(NAME ${PROJECT_NAME}.profile_global_new COMMAND ${global_new_test_target})
+        set_tests_properties(${PROJECT_NAME}.profile_global_new PROPERTIES TIMEOUT 120)
+        set_property(GLOBAL APPEND PROPERTY ${PROJECT_NAME}_COVERAGE_TESTS ${global_new_test_target})
+    endif ()
 
     # Links the public target as a consumer does, to check that it replaces operator new
     # in allocation builds only.

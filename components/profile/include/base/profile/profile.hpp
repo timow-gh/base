@@ -268,11 +268,11 @@ void print_report(std::FILE* stream);
 
 #if BASE_ENABLE_PROFILING && BASE_PROFILE_ALLOCATIONS
 // An allocation zone has no time to relate the bytes to, so the byte count is only
-// type-checked, as in disabled builds.
+// type-checked, as in disabled builds. Parentheses for the same reason as below.
 #define BASE_PROFILE_BANDWIDTH(name, bytes)                                                                            \
     static_cast<void>(sizeof(bytes));                                                                                  \
-    static ::base::profile::Anchor BASE_PROFILE_CONCAT(baseProfileAnchor, __LINE__){                                   \
-        name, ::base::profile::ZoneKind::allocations};                                                                 \
+    static ::base::profile::Anchor BASE_PROFILE_CONCAT(baseProfileAnchor, __LINE__)(                                   \
+        name, ::base::profile::ZoneKind::allocations);                                                                 \
     const ::base::profile::AllocationBlock BASE_PROFILE_CONCAT(baseProfileBlock, __LINE__) {                           \
         BASE_PROFILE_CONCAT(baseProfileAnchor, __LINE__)                                                               \
     }
@@ -282,12 +282,15 @@ void print_report(std::FILE* stream);
 /**
  * \brief Like BASE_PROFILE_SCOPE, and also adds `bytes` to the zone's processed bytes,
  * so the report shows its throughput.
+ *
+ * \internal Initialized with parentheses, not braces: a zone must also work inside a
+ * macro argument such as EXPECT_EXIT's statement, and the preprocessor protects only
+ * commas inside parentheses.
  */
 #define BASE_PROFILE_BANDWIDTH(name, bytes)                                                                            \
     static ::base::profile::Anchor BASE_PROFILE_CONCAT(baseProfileAnchor, __LINE__){name};                             \
-    const ::base::profile::Block BASE_PROFILE_CONCAT(baseProfileBlock, __LINE__) {                                     \
-        BASE_PROFILE_CONCAT(baseProfileAnchor, __LINE__), static_cast<::base::u64>(bytes)                              \
-    }
+    const ::base::profile::Block BASE_PROFILE_CONCAT(baseProfileBlock, __LINE__)(                                      \
+        BASE_PROFILE_CONCAT(baseProfileAnchor, __LINE__), static_cast<::base::u64>(bytes))
 
 /**
  * \brief Times the rest of the enclosing scope as the zone `name`, which must outlive
