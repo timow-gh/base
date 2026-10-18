@@ -1,11 +1,15 @@
 name: 'Ubuntu CMake Workflow'
-description: 'Run a CMake workflow preset for Ubuntu builds'
+description: 'Configure, build and test CMake workflow presets on Ubuntu with pinned compiler versions'
 inputs:
   cmake_workflow:
-    description: 'The cmake workflow to use.'
+    description: 'Workflow presets to run one after the other, separated by spaces (e.g. "workflow-test-gcc-release workflow-test-clang-release")'
     required: true
+  static_analysis:
+    description: 'Run clang-tidy in clang builds (base_STATIC_ANALYSIS); one job per pull request is enough'
+    required: false
+    default: 'false'
   install_tools:
-    description: 'Additional tools to install (space-separated list, e.g. lcov, clang-tidy)'
+    description: 'Additional tools to install (space-separated list, e.g. lcov)'
     required: false
     default: ''
   build_native_args:
@@ -16,9 +20,41 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: 'recursive'
+    - name: Select compilers
+      id: compilers
+      env:
+        WORKFLOWS: ${{ inputs.cmake_workflow }}
+        STATIC_ANALYSIS: ${{ inputs.static_analysis }}
+      run: |
+        # The presets call plain gcc and clang so that they work on any distribution.
+        # CI pins the minimum versions the README names, and installs only those.
+        gcc_version=14
+        clang_version=20
+        packages="ninja-build ccache"
+        for workflow in $WORKFLOWS; do
+          case "$workflow" in
+            *-gcc-*)
+              packages="$packages gcc-$gcc_version g++-$gcc_version"
+              ;;
+            *-clang-*)
+              # libclang-rt: the sanitizer runtimes
+              packages="$packages clang-$clang_version libclang-rt-$clang_version-dev"
+              if [ "$STATIC_ANALYSIS" = true ]; then
+                packages="$packages clang-tidy-$clang_version"
+              fi
+              ;;
+            *)
+              echo "Cannot tell the compiler of $workflow" >&2
+              exit 1
+              ;;
+          esac
+        done
+        echo "packages=$packages" >> "$GITHUB_OUTPUT"
+        echo "BASE_CI_GCC_VERSION=$gcc_version" >> "$GITHUB_ENV"
+        echo "BASE_CI_CLANG_VERSION=$clang_version" >> "$GITHUB_ENV"
+        # Read by cmake/CPM.cmake, so GoogleTest is cloned only when the cache misses.
+        echo "CPM_SOURCE_CACHE=$RUNNER_TEMP/cpm" >> "$GITHUB_ENV"
+      shell: bash
 
     - name: Install build tools
       run: |
@@ -34,50 +70,66 @@ runs:
           sudo rm -rf /var/lib/apt/lists/*
           sleep 10
         done
-        # gcc-14/g++-14 and clang-20: compilers used by the presets.
-        # libclang-rt-20-dev: clang sanitizer runtime (ASan/TSan/UBSan)
-        # ninja-build: fast build backend used by the CMake presets
-        sudo apt-get install -y gcc-14 g++-14 clang-20 libclang-rt-20-dev ninja-build ${{ inputs.install_tools }}
+        sudo apt-get install -y ${{ steps.compilers.outputs.packages }} ${{ inputs.install_tools }}
       shell: bash
 
-    - name: Extract preset names
-      id: preset
-      run: |
-        WORKFLOW_NAME="${{ inputs.cmake_workflow }}"
-        # Extract compiler and build type from workflow name
-        # workflow-test-gcc-release -> conf-gcc-release
-        # workflow-test-gcc-debug-asan -> conf-gcc-debug-asan
-        BASE_NAME="${WORKFLOW_NAME#workflow-test-}"
-        echo "configure=conf-${BASE_NAME}" >> $GITHUB_OUTPUT
-        echo "build=build-${BASE_NAME}" >> $GITHUB_OUTPUT
-        echo "test=test-${BASE_NAME}" >> $GITHUB_OUTPUT
-      shell: bash
+    - name: Cache CPM sources
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/cpm
+        key: cpm-${{ runner.os }}-${{ hashFiles('dependencies/**') }}
 
-    - name: Configure
-      run: |
-        # CPM clones GoogleTest while configuring. GitHub occasionally returns transient
-        # 5xx/connection errors, so retry the complete configure step with backoff.
-        for attempt in 1 2 3 4 5; do
-          if cmake --preset ${{ steps.preset.outputs.configure }}; then
-            break
-          fi
-          if [ "$attempt" = 5 ]; then
-            exit 1
-          fi
-          sleep "$((attempt * 30))"
-        done
-      shell: bash
+    - name: Cache compilation
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ github.job }}
+        max-size: 500M
 
-    - name: Build
+    - name: Configure, build and test
+      env:
+        WORKFLOWS: ${{ inputs.cmake_workflow }}
+        STATIC_ANALYSIS: ${{ inputs.static_analysis }}
+        BUILD_NATIVE_ARGS: ${{ inputs.build_native_args }}
       run: |
-        if [ -n "${{ inputs.build_native_args }}" ]; then
-          cmake --build --preset ${{ steps.preset.outputs.build }} -- ${{ inputs.build_native_args }}
+        if [ "$STATIC_ANALYSIS" = true ]; then
+          static_analysis=ON
         else
-          cmake --build --preset ${{ steps.preset.outputs.build }}
+          static_analysis=OFF
         fi
-      shell: bash
+        for workflow in $WORKFLOWS; do
+          # workflow-test-gcc-debug-asan -> conf-, build- and test-gcc-debug-asan
+          preset="${workflow#workflow-test-}"
+          case "$workflow" in
+            *-gcc-*) compiler="g++-$BASE_CI_GCC_VERSION" ;;
+            *-clang-*) compiler="clang++-$BASE_CI_CLANG_VERSION" ;;
+          esac
 
-    - name: Test
-      run: |
-        ctest --preset ${{ steps.preset.outputs.test }}
+          echo "::group::Configure conf-$preset"
+          # CPM clones GoogleTest while configuring when the cache misses. GitHub
+          # occasionally returns transient 5xx/connection errors, so retry with backoff.
+          for attempt in 1 2 3 4 5; do
+            if cmake --preset "conf-$preset" \
+                -DCMAKE_CXX_COMPILER="$compiler" \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                -Dbase_STATIC_ANALYSIS="$static_analysis"; then
+              break
+            fi
+            if [ "$attempt" = 5 ]; then
+              exit 1
+            fi
+            sleep "$((attempt * 30))"
+          done
+          echo "::endgroup::"
+
+          echo "::group::Build build-$preset"
+          if [ -n "$BUILD_NATIVE_ARGS" ]; then
+            cmake --build --preset "build-$preset" -- $BUILD_NATIVE_ARGS
+          else
+            cmake --build --preset "build-$preset"
+          fi
+          echo "::endgroup::"
+
+          ctest --preset "test-$preset"
+        done
+        ccache --show-stats
       shell: bash
